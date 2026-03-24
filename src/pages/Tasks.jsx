@@ -15,6 +15,8 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState(null)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
   const [editedDesc, setEditedDesc] = useState('')
+  const [editingTitleId, setEditingTitleId] = useState(null)
+  const [editedTitle, setEditedTitle] = useState('')
   
   // Custom fast force timer just to update UI without global state churn for now
   const [tick, setTick] = useState(0)
@@ -246,9 +248,43 @@ export default function Tasks() {
                           </button>
                           
                           <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                            <span className={`text-sm font-medium transition-all break-words ${isDone ? 'text-[#666] line-through' : 'text-white'}`}>
-                              {task.title}
-                            </span>
+                            {editingTitleId === task.id ? (
+                              <input
+                                value={editedTitle}
+                                onChange={(e) => setEditedTitle(e.target.value)}
+                                autoFocus
+                                onClick={(e) => e.stopPropagation()}
+                                onBlur={() => {
+                                  if (editedTitle.trim() && editedTitle !== task.title) {
+                                    updateTask(task.id, { title: editedTitle.trim() })
+                                  }
+                                  setEditingTitleId(null)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    if (editedTitle.trim() && editedTitle !== task.title) {
+                                      updateTask(task.id, { title: editedTitle.trim() })
+                                    }
+                                    setEditingTitleId(null)
+                                  } else if (e.key === 'Escape') {
+                                    setEditingTitleId(null)
+                                  }
+                                }}
+                                className="bg-[#1C1C1C] text-white text-sm px-2 py-1 rounded w-full max-w-[200px] border border-[#F0C040]/50 focus:outline-none"
+                              />
+                            ) : (
+                              <span 
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingTitleId(task.id)
+                                  setEditedTitle(task.title)
+                                }}
+                                className={`text-sm font-medium transition-all break-words cursor-text ${isDone ? 'text-[#666] line-through' : 'text-white'}`}
+                                title="Double click to edit"
+                              >
+                                {task.title}
+                              </span>
+                            )}
                             
                             <div className="flex items-center gap-2 flex-wrap">
                               {/* Goal Tag */}
@@ -382,9 +418,48 @@ export default function Tasks() {
                     {selectedTask.status === 'completed' ? 'COMPLETED' : 'IN PROGRESS'}
                   </span>
                 </div>
-                <h2 className="text-xl font-black text-white leading-tight break-words">
-                  {selectedTask.title}
-                </h2>
+                {editingTitleId === selectedTask.id ? (
+                  <input
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    autoFocus
+                    onBlur={() => {
+                      if (editedTitle.trim() && editedTitle !== selectedTask.title) {
+                        updateTask(selectedTask.id, { title: editedTitle.trim() })
+                        setSelectedTask(prev => ({ ...prev, title: editedTitle.trim() }))
+                      }
+                      setEditingTitleId(null)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (editedTitle.trim() && editedTitle !== selectedTask.title) {
+                          updateTask(selectedTask.id, { title: editedTitle.trim() })
+                          setSelectedTask(prev => ({ ...prev, title: editedTitle.trim() }))
+                        }
+                        setEditingTitleId(null)
+                      } else if (e.key === 'Escape') {
+                        setEditingTitleId(null)
+                      }
+                    }}
+                    className="text-xl font-black bg-[#1C1C1C] text-white px-2 py-1 rounded w-full border border-[#F0C040]/50 focus:outline-none"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 group">
+                    <h2 className="text-xl font-black text-white leading-tight break-words">
+                      {selectedTask.title}
+                    </h2>
+                    <button 
+                      onClick={() => {
+                        setEditingTitleId(selectedTask.id)
+                        setEditedTitle(selectedTask.title)
+                      }}
+                      className="p-1 text-[#555] hover:text-[#F0C040] transition-colors sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      title="Edit Task Title"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
               <button 
                 onClick={() => setSelectedTask(null)}
