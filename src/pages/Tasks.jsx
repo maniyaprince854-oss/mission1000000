@@ -273,15 +273,7 @@ export default function Tasks() {
                                 className="bg-[#1C1C1C] text-white text-sm px-2 py-1 rounded w-full max-w-[200px] border border-[#F0C040]/50 focus:outline-none"
                               />
                             ) : (
-                              <span 
-                                onDoubleClick={(e) => {
-                                  e.stopPropagation()
-                                  setEditingTitleId(task.id)
-                                  setEditedTitle(task.title)
-                                }}
-                                className={`text-sm font-medium transition-all break-words cursor-text ${isDone ? 'text-[#666] line-through' : 'text-white'}`}
-                                title="Double click to edit"
-                              >
+                              <span className={`text-sm font-medium transition-all break-words ${isDone ? 'text-[#666] line-through' : 'text-white'}`}>
                                 {task.title}
                               </span>
                             )}
@@ -340,6 +332,17 @@ export default function Tasks() {
                               </div>
                             ) : (
                               <>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditingTitleId(task.id)
+                                    setEditedTitle(task.title)
+                                  }}
+                                  className="p-2 text-[#555] hover:text-[#F0C040] transition-all sm:opacity-0 group-hover:opacity-100 hover:bg-[#252525] rounded-xl focus:outline-none focus:opacity-100"
+                                  title="Edit Task Name"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
                                 {!isDone && (
                                   <div className="flex items-center gap-1.5">
                                     <button 
