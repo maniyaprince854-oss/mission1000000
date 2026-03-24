@@ -105,21 +105,22 @@ export default function Tasks() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-24">
       {/* Header & Date Navigation */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">Daily Tasks</h1>
-          <p className="text-[#555] mt-1 text-sm font-medium flex items-center gap-2">
-            <Calendar size={14} className="text-[#F0C040]" />
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+        <div className="relative">
+          <div className="absolute -left-8 -top-8 w-32 h-32 bg-[#F0C040]/10 blur-[50px] rounded-full pointer-events-none" />
+          <h1 className="relative text-4xl md:text-5xl font-black bg-gradient-to-br from-white via-white to-white/40 bg-clip-text text-transparent tracking-tight drop-shadow-sm pb-1">Daily Tasks</h1>
+          <p className="relative text-[#888] mt-2 text-xs md:text-sm font-black flex items-center gap-2 tracking-widest uppercase">
+            <Calendar size={14} className="text-[#F0C040] drop-shadow-[0_0_8px_rgba(240,192,64,0.6)]" />
             {format(currentDate, 'MMMM d, yyyy')}
           </p>
         </div>
         
-        <div className="flex bg-[#141414] border border-[#1E1E1E] rounded-xl p-1 w-fit">
-          <button onClick={handlePrevDay} className="p-2 text-[#666] hover:text-white rounded-lg hover:bg-[#1C1C1C] transition-colors"><ChevronLeft size={18} /></button>
-          <button onClick={handleToday} className="px-4 py-2 text-sm font-bold text-white hover:bg-[#1C1C1C] rounded-lg transition-colors">
+        <div className="flex bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 w-fit shadow-lg relative z-10 transition-all hover:border-white/20 hover:bg-white/[0.05]">
+          <button onClick={handlePrevDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronLeft size={16} strokeWidth={3} /></button>
+          <button onClick={handleToday} className="px-6 py-2 text-sm font-black text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95 tracking-wide">
             {getDateLabel()}
           </button>
-          <button onClick={handleNextDay} className="p-2 text-[#666] hover:text-white rounded-lg hover:bg-[#1C1C1C] transition-colors"><ChevronRight size={18} /></button>
+          <button onClick={handleNextDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronRight size={16} strokeWidth={3} /></button>
         </div>
       </div>
 
@@ -128,18 +129,21 @@ export default function Tasks() {
         <div className="mb-6">
           <div className="flex justify-between text-xs text-[#555] font-bold uppercase tracking-wide mb-2">
             <span>{completedCount} of {dailyTasks.length} completed</span>
-            <span className="text-[#F0C040]">{progressPct}%</span>
+            <span className="text-[#F0C040] drop-shadow-[0_0_5px_rgba(240,192,64,0.3)]">{progressPct}%</span>
           </div>
-          <div className="h-1.5 bg-[#1E1E1E] rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, backgroundColor: '#F0C040' }} />
+          <div className="relative h-2 bg-white/[0.03] rounded-full overflow-hidden backdrop-blur-sm border border-white/5 shadow-inner">
+            <div className="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_#F0C040]" style={{ width: `${progressPct}%`, backgroundColor: '#F0C040' }}>
+              <div className="absolute inset-0 bg-white/20 w-full animate-[pulse-ring_2s_ease-in-out_infinite]" />
+            </div>
           </div>
         </div>
       )}
 
       {/* Add Task Form */}
-      <form onSubmit={handleAddTask} className="bg-[#141414] border border-[#1E1E1E] rounded-2xl p-2 mb-6 flex flex-col sm:flex-row focus-within:border-[#F0C040]/50 transition-colors">
-        <div className="flex-1 flex items-center px-4 py-2">
-          <Plus size={18} className="text-[#555] mr-3" />
+      <form onSubmit={handleAddTask} className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] backdrop-blur-xl border border-white/10 rounded-2xl p-2 mb-8 flex flex-col sm:flex-row shadow-2xl focus-within:border-[#F0C040] focus-within:shadow-[0_0_30px_rgba(240,192,64,0.15)] transition-all duration-500 hover:border-white/20 group relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#F0C040]/0 via-[#F0C040]/5 to-[#F0C040]/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out pointer-events-none" />
+        <div className="flex-1 flex items-center px-4 py-2 relative z-10">
+          <Plus size={20} className="text-[#777] mr-3 group-focus-within:text-[#F0C040] transition-colors duration-500 drop-shadow-sm" strokeWidth={3} />
           <input
             value={newTaskTitle}
             onChange={(e) => setNewTaskTitle(e.target.value)}
@@ -147,8 +151,8 @@ export default function Tasks() {
             className="w-full bg-transparent text-white text-sm focus:outline-none placeholder-[#444]"
           />
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-2 sm:px-0 pb-2 sm:pb-0 sm:pr-2 border-t sm:border-t-0 sm:border-l border-[#1E1E1E] sm:pl-3 pt-2 sm:pt-0">
-          <div className="flex items-center gap-2 bg-[#1C1C1C] px-3 py-1.5 rounded-xl border border-[#1E1E1E] transition-all focus-within:border-[#F0C040]/30">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-2 sm:px-0 pb-2 sm:pb-0 sm:pr-2 border-t sm:border-t-0 sm:border-l border-white/10 sm:pl-4 pt-4 sm:pt-0 relative z-10">
+          <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/5 transition-all focus-within:border-[#F0C040]/50 focus-within:bg-[#F0C040]/5">
             <Clock size={14} className="text-[#F0C040]" />
             <input
               type="number"
@@ -215,9 +219,9 @@ export default function Tasks() {
                             setEditedDesc(task.description || '')
                             setIsEditingDesc(false)
                           }}
-                          className={`group flex items-center gap-3 sm:gap-4 bg-[#141414] border rounded-2xl p-3 sm:p-4 transition-all cursor-pointer
-                            ${isDone ? 'opacity-60 border-[#1E1E1E]' : isRunning ? 'border-[#10b981]/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'border-[#1E1E1E] hover:border-[#2a2a2a]'}
-                            ${snapshot.isDragging ? 'shadow-2xl border-[#F0C040] scale-[1.02] z-50' : ''}`}
+                          className={`group flex items-center gap-3 sm:gap-4 bg-white/[0.02] backdrop-blur-lg border rounded-2xl p-4 transition-all duration-300 cursor-pointer overflow-hidden relative
+                            ${isDone ? 'opacity-40 border-white/5 grayscale saturate-50 hover:opacity-60' : isRunning ? 'border-[#10b981]/50 shadow-[0_0_30px_rgba(16,185,129,0.15)] bg-gradient-to-r from-[#10b981]/10 to-transparent' : 'border-white/10 hover:border-white/20 hover:bg-white/[0.04] hover:shadow-2xl hover:-translate-y-1 hover:shadow-black/50'}
+                            ${snapshot.isDragging ? 'shadow-[0_30px_60px_rgba(0,0,0,0.6)] border-[#F0C040] scale-[1.03] z-50 bg-[#141414]/95 backdrop-blur-2xl ring-1 ring-[#F0C040]/50' : ''}`}
                           style={{
                             ...provided.draggableProps.style,
                             borderLeft: goal && !isDone && !isRunning && !snapshot.isDragging ? `3px solid ${goal.color}` : undefined
@@ -236,20 +240,20 @@ export default function Tasks() {
                               e.stopPropagation()
                               toggleTask(task.id)
                             }}
-                            className="flex-shrink-0 text-[#555] hover:text-[#F0C040] transition-colors focus:outline-none"
+                            className="flex-shrink-0 text-[#666] hover:text-[#F0C040] transition-colors focus:outline-none hover:scale-110 active:scale-95 duration-300"
                           >
                             {isDone ? (
-                              <div className="w-6 h-6 rounded-full bg-[#10b981] flex items-center justify-center">
-                                <Check size={14} className="text-black" />
+                              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                                <Check size={16} className="text-white drop-shadow-sm" strokeWidth={3} />
                               </div>
                             ) : (
-                              <Circle size={24} strokeWidth={1.5} />
+                              <Circle size={28} strokeWidth={1.5} className="opacity-70 group-hover:opacity-100 transition-opacity" />
                             )}
                           </button>
                           
                           <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                             {editingTitleId === task.id ? (
-                              <input
+                              <textarea
                                 value={editedTitle}
                                 onChange={(e) => setEditedTitle(e.target.value)}
                                 autoFocus
@@ -261,7 +265,8 @@ export default function Tasks() {
                                   setEditingTitleId(null)
                                 }}
                                 onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault()
                                     if (editedTitle.trim() && editedTitle !== task.title) {
                                       updateTask(task.id, { title: editedTitle.trim() })
                                     }
@@ -270,7 +275,8 @@ export default function Tasks() {
                                     setEditingTitleId(null)
                                   }
                                 }}
-                                className="bg-[#1C1C1C] text-white text-sm px-2 py-1 rounded w-full max-w-[200px] border border-[#F0C040]/50 focus:outline-none"
+                                rows={2}
+                                className="bg-[#1C1C1C] text-white text-sm px-2 py-1 rounded w-full border border-[#F0C040]/50 focus:outline-none resize-none flex-1"
                               />
                             ) : (
                               <span className={`text-sm font-medium transition-all break-words ${isDone ? 'text-[#666] line-through' : 'text-white'}`}>
@@ -395,12 +401,14 @@ export default function Tasks() {
 
       {/* Task Details Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
           <div 
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-500"
             onClick={() => setSelectedTask(null)}
           />
-          <div className="relative w-full max-w-lg bg-[#0C0C0C] border border-[#1E1E1E] rounded-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+          <div className="relative w-full max-w-lg bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-3xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 fill-mode-both duration-300">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+            <div className="absolute top-0 right-0 p-40 bg-[#F0C040]/10 blur-[120px] rounded-full pointer-events-none" />
             {/* Modal Header */}
             <div className="flex items-start justify-between p-6 pb-0">
               <div className="flex-1">
@@ -422,7 +430,7 @@ export default function Tasks() {
                   </span>
                 </div>
                 {editingTitleId === selectedTask.id ? (
-                  <input
+                  <textarea
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
                     autoFocus
@@ -434,7 +442,8 @@ export default function Tasks() {
                       setEditingTitleId(null)
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
                         if (editedTitle.trim() && editedTitle !== selectedTask.title) {
                           updateTask(selectedTask.id, { title: editedTitle.trim() })
                           setSelectedTask(prev => ({ ...prev, title: editedTitle.trim() }))
@@ -444,7 +453,8 @@ export default function Tasks() {
                         setEditingTitleId(null)
                       }
                     }}
-                    className="text-xl font-black bg-[#1C1C1C] text-white px-2 py-1 rounded w-full border border-[#F0C040]/50 focus:outline-none"
+                    rows={3}
+                    className="text-xl font-black bg-[#1C1C1C] text-white px-3 py-2 rounded-xl w-full border border-[#F0C040]/50 focus:outline-none resize-none leading-tight"
                   />
                 ) : (
                   <div className="flex items-center gap-2 group">
