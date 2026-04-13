@@ -157,8 +157,18 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
   )
 }
 
-function TaskHistoryModal({ task, onClose }) {
+function TaskHistoryModal({ task, onClose, onTaskUpdate }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(task ? task.title : '');
+
   if (!task) return null;
+
+  const handleSaveTitle = () => {
+    if (draftTitle.trim() && draftTitle.trim() !== task.title) {
+      onTaskUpdate(task.id, { title: draftTitle.trim() });
+    }
+    setIsEditing(false);
+  }
 
   const totalTime = getTaskTotalTime(task);
   let timeLogList = [];
@@ -171,8 +181,24 @@ function TaskHistoryModal({ task, onClose }) {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-[#141414] border border-[#252525] rounded-2xl p-6 w-full max-w-md" style={{ borderTop: '2px solid #F0C040' }} onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-lg font-black text-white pr-4 leading-tight">{task.title}</h2>
+          <div className="flex-1 min-w-0 pr-4">
+            {isEditing ? (
+              <input 
+                autoFocus
+                value={draftTitle}
+                onChange={e => setDraftTitle(e.target.value)}
+                onBlur={handleSaveTitle}
+                onKeyDown={e => e.key === 'Enter' && handleSaveTitle()}
+                className="w-full text-lg font-black text-white bg-[#1C1C1C] border border-[#F0C040] rounded-xl px-3 py-1 focus:outline-none"
+              />
+            ) : (
+              <div className="flex items-start gap-2 group">
+                <h2 className="text-lg font-black text-white leading-tight">{task.title}</h2>
+                <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#555] hover:text-[#F0C040] mt-0.5" title="Edit Task Name">
+                  <Pencil size={14} />
+                </button>
+              </div>
+            )}
             <div className="text-xs text-[#666] font-bold uppercase tracking-wider mt-2">Task History & Details</div>
           </div>
           <button onClick={onClose} className="p-1.5 text-[#555] hover:text-white transition-colors bg-[#1E1E1E] rounded-lg">
@@ -295,6 +321,7 @@ export default function Goals() {
   const deleteGoal = useStore((s) => s.deleteGoal)
   const startTask = useStore((s) => s.startTask)
   const pauseTask = useStore((s) => s.pauseTask)
+  const updateTask = useStore((s) => s.updateTask)
   
   const [showModal, setShowModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
@@ -392,7 +419,16 @@ export default function Goals() {
         </div>
       )}
       {showModal && <GoalModal form={form} setForm={setForm} editing={editingGoal} onSave={handleSave} onClose={closeModal} />}
-      {selectedTaskHistory && <TaskHistoryModal task={selectedTaskHistory} onClose={() => setSelectedTaskHistory(null)} />}
+      {selectedTaskHistory && (
+        <TaskHistoryModal 
+          task={selectedTaskHistory} 
+          onClose={() => setSelectedTaskHistory(null)} 
+          onTaskUpdate={(id, updates) => {
+            updateTask(id, updates);
+            setSelectedTaskHistory((prev) => ({...prev, ...updates}));
+          }}
+        />
+      )}
     </div>
   )
 }
