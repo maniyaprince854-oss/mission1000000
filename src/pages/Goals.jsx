@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Trash2, X, Calendar as CalIcon, AlertOctagon } from 'lucide-react'
+import { Pencil, Trash2, X, Calendar as CalIcon, AlertOctagon, Play, Pause } from 'lucide-react'
 import { format } from 'date-fns'
 import useStore from '../store'
 import { getGoalProgress, getDaysUntil, getTaskTotalTime } from '../utils/calculations'
@@ -15,7 +15,7 @@ const EMPTY = {
   color: COLORS[0]
 }
 
-function GoalCard({ goal, tasks, onEdit, onDelete }) {
+function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask }) {
   const [expanded, setExpanded] = useState(false)
   const { total, completed, percentage, totalTimeSpent } = getGoalProgress(goal.id, tasks)
   const goalTasks = tasks.filter(t => t.goalId === goal.id)
@@ -114,9 +114,24 @@ function GoalCard({ goal, tasks, onEdit, onDelete }) {
                       <div className="text-[9px] text-[#666] font-medium mt-0.5">{format(new Date(t.date), 'MMM d, yyyy')}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${t.status === 'completed' ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#252525] text-[#888]'}`}>
-                        {t.status === 'completed' ? 'Done' : 'Pending'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {t.status !== 'completed' && (
+                          <button
+                            title={t.isRunning ? "Pause Task" : "Start Task"}
+                            onClick={() => t.isRunning ? onPauseTask(t.id) : onStartTask(t.id)}
+                            className={`p-1 rounded-full border transition-colors ${
+                              t.isRunning 
+                                ? 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 hover:bg-[#f59e0b]/20' 
+                                : 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20 hover:bg-[#10b981]/20'
+                            }`}
+                          >
+                            {t.isRunning ? <Pause size={10} className="fill-current" /> : <Play size={10} className="fill-current translate-x-[1px]" />}
+                          </button>
+                        )}
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${t.status === 'completed' ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#252525] text-[#888]'}`}>
+                          {t.status === 'completed' ? 'Done' : 'Pending'}
+                        </span>
+                      </div>
                       {liveTime > 0 && (
                         <span className={`text-[9px] font-bold ${t.isRunning ? 'text-[#10b981]' : 'text-[#888]'}`}>
                           {liveTime}m
@@ -228,6 +243,8 @@ export default function Goals() {
   const addGoal = useStore((s) => s.addGoal)
   const updateGoal = useStore((s) => s.updateGoal)
   const deleteGoal = useStore((s) => s.deleteGoal)
+  const startTask = useStore((s) => s.startTask)
+  const pauseTask = useStore((s) => s.pauseTask)
   
   const [showModal, setShowModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
@@ -316,6 +333,8 @@ export default function Goals() {
               tasks={tasks} 
               onEdit={handleEdit} 
               onDelete={handleDelete} 
+              onStartTask={startTask}
+              onPauseTask={pauseTask}
             />
           ))}
         </div>
