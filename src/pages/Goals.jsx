@@ -15,7 +15,7 @@ const EMPTY = {
   color: COLORS[0]
 }
 
-function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask }) {
+function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onTaskClick }) {
   const [expanded, setExpanded] = useState(false)
   const { total, completed, percentage, totalTimeSpent } = getGoalProgress(goal.id, tasks)
   const goalTasks = tasks.filter(t => t.goalId === goal.id)
@@ -106,19 +106,19 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask }) {
                 if (t.isRunning && t.startTime) liveTime += Math.floor((Date.now() - t.startTime) / 60000)
                 
                 return (
-                  <div key={t.id} className="flex justify-between items-start gap-3 p-2 rounded-xl bg-[#141414] border border-[#252525]">
-                    <div className="min-w-0 flex-1">
-                      <div className={`text-xs font-semibold truncate ${t.status === 'completed' ? 'text-[#555] line-through' : 'text-white'}`}>
+                  <div key={t.id} onClick={() => onTaskClick(t)} className="flex justify-between items-start gap-3 p-2 rounded-xl bg-[#141414] border border-[#252525] cursor-pointer hover:border-[#333] hover:bg-[#1a1a1a] transition-all">
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className={`text-xs font-semibold leading-relaxed line-clamp-2 ${t.status === 'completed' ? 'text-[#555] line-through' : 'text-white'}`}>
                         {t.title}
                       </div>
-                      <div className="text-[9px] text-[#666] font-medium mt-0.5">{format(new Date(t.date), 'MMM d, yyyy')}</div>
+                      <div className="text-[9px] text-[#666] font-medium mt-1 uppercase tracking-wider">{format(new Date(t.date), 'MMM d, yyyy')}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <div className="flex items-center gap-2">
                         {t.status !== 'completed' && (
                           <button
                             title={t.isRunning ? "Pause Task" : "Start Task"}
-                            onClick={() => t.isRunning ? onPauseTask(t.id) : onStartTask(t.id)}
+                            onClick={(e) => { e.stopPropagation(); t.isRunning ? onPauseTask(t.id) : onStartTask(t.id) }}
                             className={`p-1 rounded-full border transition-colors ${
                               t.isRunning 
                                 ? 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 hover:bg-[#f59e0b]/20' 
@@ -153,6 +153,56 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask }) {
       >
         {expanded ? 'Hide Tasks ▲' : 'Show Tasks ▼'}
       </button>
+    </div>
+  )
+}
+
+function TaskHistoryModal({ task, onClose }) {
+  if (!task) return null;
+
+  const totalTime = getTaskTotalTime(task);
+  let timeLogList = [];
+  if (task.timeLog) {
+    timeLogList = Object.entries(task.timeLog)
+      .sort((a, b) => new Date(b[0]) - new Date(a[0])) // Descending sorting by date
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-[#141414] border border-[#252525] rounded-2xl p-6 w-full max-w-md" style={{ borderTop: '2px solid #F0C040' }} onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h2 className="text-lg font-black text-white pr-4 leading-tight">{task.title}</h2>
+            <div className="text-xs text-[#666] font-bold uppercase tracking-wider mt-2">Task History & Details</div>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-[#555] hover:text-white transition-colors bg-[#1E1E1E] rounded-lg">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mb-6 bg-[#0e0e0e] border border-[#1E1E1E] rounded-xl p-4 flex justify-between items-center">
+          <span className="text-xs text-[#888] font-bold uppercase tracking-wider">Total Time Logged</span>
+          <span className="text-2xl font-black tabular-nums text-[#F0C040]">{totalTime}m</span>
+        </div>
+
+        <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 scrollbar-hide">
+          {timeLogList.length === 0 ? (
+            <div className="text-center bg-[#0e0e0e] border border-dashed border-[#252525] rounded-xl text-[#555] text-xs py-8 font-medium">No time logged yet.</div>
+          ) : (
+            timeLogList.map(([date, mins]) => (
+              <div key={date} className="flex justify-between items-center p-3.5 rounded-xl bg-[#1C1C1C] border border-[#252525]">
+                <div className="flex items-center gap-3">
+                  <div className="bg-[#252525] p-2 rounded-lg text-[#F0C040]">
+                    <CalIcon size={14} />
+                  </div>
+                  <span className="text-sm font-semibold text-white">{format(new Date(date), 'MMMM d, yyyy')}</span>
+                </div>
+                <span className="text-sm font-bold text-[#10b981] bg-[#10b981]/10 px-2.5 py-1 rounded-md tabular-nums">+{mins}m</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -250,6 +300,7 @@ export default function Goals() {
   const [editingGoal, setEditingGoal] = useState(null)
   const [form, setForm] = useState(EMPTY)
   const [filter, setFilter] = useState('all')
+  const [selectedTaskHistory, setSelectedTaskHistory] = useState(null)
 
   const handleEdit = (goal) => { 
     setEditingGoal(goal)
@@ -335,11 +386,13 @@ export default function Goals() {
               onDelete={handleDelete} 
               onStartTask={startTask}
               onPauseTask={pauseTask}
+              onTaskClick={setSelectedTaskHistory}
             />
           ))}
         </div>
       )}
       {showModal && <GoalModal form={form} setForm={setForm} editing={editingGoal} onSave={handleSave} onClose={closeModal} />}
+      {selectedTaskHistory && <TaskHistoryModal task={selectedTaskHistory} onClose={() => setSelectedTaskHistory(null)} />}
     </div>
   )
 }
