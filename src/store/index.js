@@ -86,6 +86,15 @@ const useStore = create(
             if (t.goalId === id) t.goalId = null
           })
         }),
+      reorderGoals: (activeId, overId) =>
+        set((state) => {
+          const activeIndex = state.goals.findIndex(g => g.id === activeId)
+          const overIndex = state.goals.findIndex(g => g.id === overId)
+          if (activeIndex !== -1 && overIndex !== -1) {
+            const [removed] = state.goals.splice(activeIndex, 1)
+            state.goals.splice(overIndex, 0, removed)
+          }
+        }),
 
       // Task actions
       addTask: (task) =>

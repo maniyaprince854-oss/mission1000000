@@ -16,11 +16,20 @@ const EMPTY = {
   color: COLORS[0]
 }
 
-function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onTaskClick }) {
+function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onTaskClick, onAddTask, dragHandleProps }) {
   const [expanded, setExpanded] = useState(false)
   const { total, completed, percentage, totalTimeSpent } = getGoalProgress(goal.id, tasks)
   const goalTasks = tasks.filter(t => t.goalId === goal.id)
   const daysUntil = getDaysUntil(goal.targetDate)
+  
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+
+  const handleAddTask = (e) => {
+    if (e.key === 'Enter' && newTaskTitle.trim()) {
+      onAddTask({ id: crypto.randomUUID(), title: newTaskTitle.trim(), date: new Date().toISOString().split('T')[0], goalId: goal.id, status: 'pending' });
+      setNewTaskTitle('');
+    }
+  }
   
   let urgencyClass = "text-[#666]"
   let urgencyBg = ""
@@ -42,9 +51,13 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
       {/* Card top accent */}
       <div className="px-5 pt-5 pb-4" style={{ background: `linear-gradient(135deg, ${goal.color}0d 0%, transparent 60%)` }}>
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white text-sm leading-tight">{goal.name}</h3>
-            {goal.targetDate && (
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing text-[#555] hover:text-white mt-0.5">
+              <GripVertical size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-white text-sm leading-tight">{goal.name}</h3>
+              {goal.targetDate && (
               <div className={`flex items-center gap-1.5 mt-2 text-xs font-medium w-fit ${urgencyClass} ${urgencyBg}`}>
                 <UrgencyIcon size={12} />
                 <span>
@@ -55,6 +68,7 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
                 </span>
               </div>
             )}
+          </div>
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button onClick={() => onEdit(goal)} className="p-1.5 text-[#555] hover:text-white rounded-lg transition-colors"><Pencil size={12} /></button>
@@ -169,6 +183,14 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
               )}
             </Droppable>
           )}
+
+          <input 
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            onKeyDown={handleAddTask}
+            placeholder="Type and press Enter to add task..."
+            className="w-full mt-3 bg-[#1C1C1C] border border-[#252525] text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F0C040] placeholder-[#555]"
+          />
         </div>
       </div>
       
@@ -349,6 +371,8 @@ export default function Goals() {
   const pauseTask = useStore((s) => s.pauseTask)
   const updateTask = useStore((s) => s.updateTask)
   const reorderTasks = useStore((s) => s.reorderTasks)
+  const addTask = useStore((s) => s.addTask)
+  const reorderGoals = useStore((s) => s.reorderGoals)
   
   const [showModal, setShowModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
@@ -396,7 +420,16 @@ export default function Goals() {
   
   const handleDragEnd = (result) => {
     if (!result.destination) return;
-    const { source, destination, draggableId } = result;
+    const { source, destination, draggableId, type } = result;
+
+    if (type === 'goal') {
+      if (source.index !== destination.index) {
+        const activeId = draggableId;
+        const overId = filtered[destination.index].id;
+        reorderGoals(activeId, overId);
+      }
+      return;
+    }
 
     if (source.droppableId === destination.droppableId && source.index !== destination.index) {
       const goalTasks = tasks.filter(t => t.goalId === source.droppableId);
@@ -444,20 +477,36 @@ export default function Goals() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((goal) => (
-            <GoalCard 
-              key={goal.id} 
-              goal={goal} 
-              tasks={tasks} 
-              onEdit={handleEdit} 
-              onDelete={handleDelete} 
-              onStartTask={startTask}
-              onPauseTask={pauseTask}
-              onTaskClick={setSelectedTaskHistory}
-            />
-          ))}
-        </div>
+        <Droppable droppableId="goals-list" type="goal" direction="horizontal">
+          {(provided) => (
+            <div 
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+            >
+              {filtered.map((goal, index) => (
+                <Draggable key={goal.id} draggableId={goal.id} index={index}>
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.draggableProps}>
+                      <GoalCard 
+                        goal={goal} 
+                        tasks={tasks} 
+                        onEdit={handleEdit} 
+                        onDelete={handleDelete} 
+                        onStartTask={startTask}
+                        onPauseTask={pauseTask}
+                        onTaskClick={setSelectedTaskHistory}
+                        onAddTask={addTask}
+                        dragHandleProps={provided.dragHandleProps}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
       )}
       {showModal && <GoalModal form={form} setForm={setForm} editing={editingGoal} onSave={handleSave} onClose={closeModal} />}
       {selectedTaskHistory && (
