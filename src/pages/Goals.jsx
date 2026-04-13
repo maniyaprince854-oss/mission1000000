@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Pencil, Trash2, X, Calendar as CalIcon, AlertOctagon, Play, Pause } from 'lucide-react'
+import { Pencil, Trash2, X, Calendar as CalIcon, AlertOctagon, Play, Pause, GripVertical } from 'lucide-react'
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { format } from 'date-fns'
 import useStore from '../store'
 import { getGoalProgress, getDaysUntil, getTaskTotalTime } from '../utils/calculations'
@@ -90,7 +91,7 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
       </div>
       
       {/* Expandable Task List */}
-      <div className={`overflow-hidden transition-all duration-300 ${expanded ? 'max-h-[800px] border-t border-[#1a1a1a]' : 'max-h-0'}`}>
+      <div className={`overflow-hidden transition-all duration-300 ${expanded ? 'border-t border-[#1a1a1a]' : 'max-h-0'}`}>
         <div className="bg-[#0e0e0e] p-4 text-sm">
           <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#252525]">
             <span className="text-[#888] font-bold text-[10px] uppercase tracking-wider">Associated Tasks</span>
@@ -100,48 +101,73 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
           {goalTasks.length === 0 ? (
             <div className="text-center text-[#555] text-xs py-2 italic font-medium">No tasks linked yet.</div>
           ) : (
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 scrollbar-hide">
-              {goalTasks.map((t) => {
-                let liveTime = getTaskTotalTime(t)
-                if (t.isRunning && t.startTime) liveTime += Math.floor((Date.now() - t.startTime) / 60000)
-                
-                return (
-                  <div key={t.id} onClick={() => onTaskClick(t)} className="flex justify-between items-start gap-3 p-2 rounded-xl bg-[#141414] border border-[#252525] cursor-pointer hover:border-[#333] hover:bg-[#1a1a1a] transition-all">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className={`text-xs font-semibold leading-relaxed line-clamp-2 ${t.status === 'completed' ? 'text-[#555] line-through' : 'text-white'}`}>
-                        {t.title}
-                      </div>
-                      <div className="text-[9px] text-[#666] font-medium mt-1 uppercase tracking-wider">{format(new Date(t.date), 'MMM d, yyyy')}</div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <div className="flex items-center gap-2">
-                        {t.status !== 'completed' && (
-                          <button
-                            title={t.isRunning ? "Pause Task" : "Start Task"}
-                            onClick={(e) => { e.stopPropagation(); t.isRunning ? onPauseTask(t.id) : onStartTask(t.id) }}
-                            className={`p-1 rounded-full border transition-colors ${
-                              t.isRunning 
-                                ? 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 hover:bg-[#f59e0b]/20' 
-                                : 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20 hover:bg-[#10b981]/20'
-                            }`}
+            <Droppable droppableId={goal.id} direction="vertical">
+              {(provided) => (
+                <div 
+                  ref={provided.innerRef} 
+                  {...provided.droppableProps}
+                  className="space-y-2 pb-1"
+                >
+                  {goalTasks.map((t, index) => {
+                    let liveTime = getTaskTotalTime(t)
+                    if (t.isRunning && t.startTime) liveTime += Math.floor((Date.now() - t.startTime) / 60000)
+                    
+                    return (
+                      <Draggable key={t.id} draggableId={t.id} index={index}>
+                        {(provided) => (
+                          <div 
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            onClick={() => onTaskClick(t)} 
+                            className="flex justify-between items-start gap-3 p-2 rounded-xl bg-[#141414] border border-[#252525] cursor-pointer hover:border-[#333] hover:bg-[#1a1a1a] transition-all"
                           >
-                            {t.isRunning ? <Pause size={10} className="fill-current" /> : <Play size={10} className="fill-current translate-x-[1px]" />}
-                          </button>
+                            <div 
+                              {...provided.dragHandleProps} 
+                              className="mt-0.5 cursor-grab active:cursor-grabbing text-[#444] hover:text-[#888]" 
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <GripVertical size={14} />
+                            </div>
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className={`text-xs font-semibold leading-relaxed line-clamp-2 ${t.status === 'completed' ? 'text-[#555] line-through' : 'text-white'}`}>
+                                {t.title}
+                              </div>
+                              <div className="text-[9px] text-[#666] font-medium mt-1 uppercase tracking-wider">{format(new Date(t.date), 'MMM d, yyyy')}</div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                              <div className="flex items-center gap-2">
+                                {t.status !== 'completed' && (
+                                  <button
+                                    title={t.isRunning ? "Pause Task" : "Start Task"}
+                                    onClick={(e) => { e.stopPropagation(); t.isRunning ? onPauseTask(t.id) : onStartTask(t.id) }}
+                                    className={`p-1 rounded-full border transition-colors ${
+                                      t.isRunning 
+                                        ? 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20 hover:bg-[#f59e0b]/20' 
+                                        : 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20 hover:bg-[#10b981]/20'
+                                    }`}
+                                  >
+                                    {t.isRunning ? <Pause size={10} className="fill-current" /> : <Play size={10} className="fill-current translate-x-[1px]" />}
+                                  </button>
+                                )}
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${t.status === 'completed' ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#252525] text-[#888]'}`}>
+                                  {t.status === 'completed' ? 'Done' : 'Pending'}
+                                </span>
+                              </div>
+                              {liveTime > 0 && (
+                                <span className={`text-[9px] font-bold ${t.isRunning ? 'text-[#10b981]' : 'text-[#888]'}`}>
+                                  {liveTime}m
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         )}
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${t.status === 'completed' ? 'bg-[#10b981]/10 text-[#10b981]' : 'bg-[#252525] text-[#888]'}`}>
-                          {t.status === 'completed' ? 'Done' : 'Pending'}
-                        </span>
-                      </div>
-                      {liveTime > 0 && (
-                        <span className={`text-[9px] font-bold ${t.isRunning ? 'text-[#10b981]' : 'text-[#888]'}`}>
-                          {liveTime}m
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                      </Draggable>
+                    )
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
           )}
         </div>
       </div>
@@ -322,6 +348,7 @@ export default function Goals() {
   const startTask = useStore((s) => s.startTask)
   const pauseTask = useStore((s) => s.pauseTask)
   const updateTask = useStore((s) => s.updateTask)
+  const reorderTasks = useStore((s) => s.reorderTasks)
   
   const [showModal, setShowModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
@@ -367,10 +394,24 @@ export default function Goals() {
     }, 200) // slight delay to prevent flicker during modal close animation
   }
   
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+    const { source, destination, draggableId } = result;
+
+    if (source.droppableId === destination.droppableId && source.index !== destination.index) {
+      const goalTasks = tasks.filter(t => t.goalId === source.droppableId);
+      const overId = goalTasks[destination.index].id;
+      reorderTasks(draggableId, overId);
+    } else if (source.droppableId !== destination.droppableId) {
+      updateTask(draggableId, { goalId: destination.droppableId });
+    }
+  }
+
   const filtered = filter === 'all' ? goals : goals.filter((g) => g.status === filter)
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto pb-24">
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <div className="p-4 md:p-8 max-w-6xl mx-auto pb-24">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">Goals</h1>
@@ -430,5 +471,6 @@ export default function Goals() {
         />
       )}
     </div>
+    </DragDropContext>
   )
 }
