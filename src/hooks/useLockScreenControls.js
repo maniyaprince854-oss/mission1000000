@@ -16,6 +16,21 @@ export default function useLockScreenControls() {
       const audio = new Audio(SILENT_AUDIO_BASE64);
       audio.loop = true;
       audioRef.current = audio;
+
+      const unlockAudio = () => {
+        if (audioRef.current) {
+          audioRef.current.play().then(() => {
+            if (!useStore.getState().tasks.some(t => t.isRunning)) {
+              audioRef.current.pause();
+            }
+          }).catch(() => {});
+        }
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+      };
+
+      document.addEventListener('click', unlockAudio);
+      document.addEventListener('touchstart', unlockAudio);
     }
 
     // 2. Identify precisely what is logically running currently
