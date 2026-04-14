@@ -8,9 +8,11 @@ import Planning from './pages/Planning'
 import Settings from './pages/Settings'
 import Units from './pages/Units'
 import useStore from './store'
+import useLockScreenControls from './hooks/useLockScreenControls'
 
 export default function App() {
   const rolloverTasks = useStore((s) => s.rolloverTasks)
+  useLockScreenControls()
 
   useEffect(() => {
     console.log('App mounted, running initial task rollover...')
