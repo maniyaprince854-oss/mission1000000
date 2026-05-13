@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { format, addDays, subDays, isToday, isTomorrow, isYesterday } from 'date-fns'
-import { Plus, Check, Circle, Trash2, Calendar, ChevronLeft, ChevronRight, Play, Pause, Clock, GripVertical, X, Edit2, Info } from 'lucide-react'
+import { Plus, Check, Circle, Trash2, Calendar, ChevronLeft, ChevronRight, Play, Pause, Clock, GripVertical, X, Edit2, FileText } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import useStore from '../store'
 import { getTasksByDate, getTaskTotalTime } from '../utils/calculations'
+import { generateDailyReport } from '../utils/generateReport'
 
 export default function Tasks() {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -39,9 +40,17 @@ export default function Tasks() {
   
   const activeGoals = goals.filter((g) => g.status === 'active')
 
+  const settings = useStore((s) => s.settings)
+
   const dateStr = format(currentDate, 'yyyy-MM-dd')
   const dailyTasks = getTasksByDate(tasks, dateStr)
-  
+  // Running task floats to top; preserve manual order within groups
+  const sortedDailyTasks = [...dailyTasks].sort((a, b) => {
+    if (a.isRunning && !b.isRunning) return -1
+    if (!a.isRunning && b.isRunning) return 1
+    return 0
+  })
+
   const handlePrevDay = () => setCurrentDate((d) => subDays(d, 1))
   const handleNextDay = () => setCurrentDate((d) => addDays(d, 1))
   const handleToday = () => setCurrentDate(new Date())
@@ -80,7 +89,7 @@ export default function Tasks() {
   const handleDragEnd = (result) => {
     if (!result.destination) return
     if (result.source.index === result.destination.index) return
-    reorderTasks(result.draggableId, dailyTasks[result.destination.index].id)
+    reorderTasks(result.draggableId, sortedDailyTasks[result.destination.index].id)
   }
 
   const handleAddManualTime = (taskId) => {
@@ -115,12 +124,22 @@ export default function Tasks() {
           </p>
         </div>
         
-        <div className="flex bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 w-fit shadow-lg relative z-10 transition-all hover:border-white/20 hover:bg-white/[0.05]">
-          <button onClick={handlePrevDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronLeft size={16} strokeWidth={3} /></button>
-          <button onClick={handleToday} className="px-6 py-2 text-sm font-black text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95 tracking-wide">
-            {getDateLabel()}
+        <div className="flex items-center gap-3">
+          <div className="flex bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 w-fit shadow-lg relative z-10 transition-all hover:border-white/20 hover:bg-white/[0.05]">
+            <button onClick={handlePrevDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronLeft size={16} strokeWidth={3} /></button>
+            <button onClick={handleToday} className="px-6 py-2 text-sm font-black text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95 tracking-wide">
+              {getDateLabel()}
+            </button>
+            <button onClick={handleNextDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronRight size={16} strokeWidth={3} /></button>
+          </div>
+          <button
+            onClick={() => generateDailyReport(tasks, goals, settings, dateStr)}
+            title="Download Daily PDF Report"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#F0C040]/10 border border-[#F0C040]/30 text-[#F0C040] rounded-2xl text-xs font-black uppercase tracking-wider hover:bg-[#F0C040]/20 hover:border-[#F0C040]/60 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#F0C040]/5"
+          >
+            <FileText size={14} />
+            <span className="hidden sm:block">PDF</span>
           </button>
-          <button onClick={handleNextDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronRight size={16} strokeWidth={3} /></button>
         </div>
       </div>
 
@@ -191,13 +210,13 @@ export default function Tasks() {
               ref={provided.innerRef}
               className="space-y-2"
             >
-              {dailyTasks.length === 0 ? (
+              {sortedDailyTasks.length === 0 ? (
                 <div className="text-center py-16 bg-[#141414] border border-[#1E1E1E] border-dashed rounded-2xl">
                   <div className="text-[#444] text-sm font-medium">No tasks for this date</div>
                   <p className="text-[#333] text-xs mt-1">Enjoy your free time or add a new task above.</p>
                 </div>
               ) : (
-                dailyTasks.map((task, index) => {
+                sortedDailyTasks.map((task, index) => {
                   const goal = goals.find(g => g.id === task.goalId)
                   const isDone = task.status === 'completed'
                   const isRunning = task.isRunning

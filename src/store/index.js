@@ -75,6 +75,29 @@ const useStore = create(
             Object.assign(goal, updates)
           }
         }),
+      addMilestone: (goalId, text) =>
+        set((state) => {
+          const goal = state.goals.find((g) => g.id === goalId)
+          if (goal) {
+            if (!goal.milestones) goal.milestones = []
+            goal.milestones.push({ id: crypto.randomUUID(), text, done: false })
+          }
+        }),
+      toggleMilestone: (goalId, milestoneId) =>
+        set((state) => {
+          const goal = state.goals.find((g) => g.id === goalId)
+          if (goal?.milestones) {
+            const m = goal.milestones.find((m) => m.id === milestoneId)
+            if (m) m.done = !m.done
+          }
+        }),
+      deleteMilestone: (goalId, milestoneId) =>
+        set((state) => {
+          const goal = state.goals.find((g) => g.id === goalId)
+          if (goal?.milestones) {
+            goal.milestones = goal.milestones.filter((m) => m.id !== milestoneId)
+          }
+        }),
       deleteGoal: (id) =>
         set((state) => {
           state.goals = state.goals.filter((g) => g.id !== id)
