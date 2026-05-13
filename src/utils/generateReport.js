@@ -23,7 +23,7 @@ function drawRoundedRect(doc, x, y, w, h, r, fillColor, strokeColor) {
   doc.roundedRect(x, y, w, h, r, r, fillColor && strokeColor ? 'FD' : fillColor ? 'F' : 'D')
 }
 
-export function generateDailyReport(tasks, goals, settings, dateStr) {
+export function generateDailyReport(tasks, goals, settings, dateStr, pomodoroData = {}) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
   const W = 210
@@ -315,6 +315,103 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
 
       y += 9
     })
+  }
+
+  // ─── POMODORO SUMMARY ────────────────────────────────────────────
+  {
+    const sessionsCompleted = pomodoroData.applesEarned ?? Math.floor(totalTime / 50)
+    const breaksTaken       = pomodoroData.applesUsedToday ?? 0
+    const focusMins         = pomodoroData.totalTodayMins  ?? totalTime
+    const breakMins         = breaksTaken * 10
+    const efficiency        = focusMins + breakMins > 0
+      ? Math.round((focusMins / (focusMins + breakMins)) * 100)
+      : 100
+
+    if (y > H - 70) { doc.addPage(); y = margin }
+
+    y += 6
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(...DARK)
+    doc.text('POMODORO SUMMARY', margin, y)
+    doc.setFillColor(...GOLD)
+    doc.rect(margin, y + 1.5, 42, 1, 'F')
+
+    y += 8
+
+    // Card background
+    drawRoundedRect(doc, margin, y, contentW, 38, 3, [15, 15, 15], [28, 28, 28])
+
+    // Session dots row
+    const dotRadius = 3.5
+    const dotSpacing = 10
+    const dotsStartX = margin + 8
+    const dotsY = y + 10
+
+    // Draw up to 10 session dots
+    const maxDots = Math.min(sessionsCompleted, 10)
+    for (let d = 0; d < maxDots; d++) {
+      const cx = dotsStartX + d * dotSpacing
+      // Filled gold dot = session done
+      doc.setFillColor(...GOLD)
+      doc.circle(cx, dotsY, dotRadius, 'F')
+      // Inner dark dot (donut style)
+      doc.setFillColor(15, 15, 15)
+      doc.circle(cx, dotsY, dotRadius - 1.5, 'F')
+      doc.setFillColor(...GOLD)
+      doc.circle(cx, dotsY, dotRadius - 2.5, 'F')
+    }
+    // Draw break-used dots in green
+    for (let d = 0; d < Math.min(breaksTaken, maxDots); d++) {
+      const cx = dotsStartX + d * dotSpacing
+      doc.setFillColor(...GREEN)
+      doc.circle(cx, dotsY, 1.2, 'F')
+    }
+
+    // Label for dots
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(...GRAY)
+    doc.text(
+      sessionsCompleted === 0
+        ? 'No sessions completed today'
+        : `${sessionsCompleted} × 50-min session${sessionsCompleted > 1 ? 's' : ''} completed${sessionsCompleted > 10 ? ` (showing 10 of ${sessionsCompleted})` : ''}`,
+      dotsStartX + maxDots * dotSpacing + (maxDots > 0 ? 4 : 0),
+      dotsY + 1
+    )
+
+    // Stats row
+    const pStats = [
+      { label: 'SESSIONS',    value: String(sessionsCompleted),  color: GOLD  },
+      { label: 'BREAKS TAKEN',value: String(breaksTaken),        color: GREEN },
+      { label: 'FOCUS TIME',  value: fmtTime(focusMins),         color: WHITE },
+      { label: 'BREAK TIME',  value: fmtTime(breakMins),         color: GRAY  },
+      { label: 'EFFICIENCY',  value: `${efficiency}%`,           color: sessionsCompleted > 0 ? GOLD : GRAY },
+    ]
+
+    const pCellW = contentW / pStats.length
+    const pStatsY = y + 22
+
+    pStats.forEach((s, i) => {
+      const cx = margin + i * pCellW + pCellW / 2
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.setTextColor(...s.color)
+      doc.text(s.value, cx, pStatsY + 4, { align: 'center' })
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6)
+      doc.setTextColor(...GRAY)
+      doc.text(s.label, cx, pStatsY + 10, { align: 'center' })
+
+      if (i < pStats.length - 1) {
+        doc.setDrawColor(30, 30, 30)
+        doc.line(margin + (i + 1) * pCellW, pStatsY, margin + (i + 1) * pCellW, pStatsY + 14)
+      }
+    })
+
+    y += 46
   }
 
   // ─── TIME BREAKDOWN ──────────────────────────────────────────────

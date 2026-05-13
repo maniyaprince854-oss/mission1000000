@@ -173,7 +173,7 @@ export default function Tasks() {
             <button onClick={handleNextDay} className="p-2 text-[#666] hover:text-white hover:bg-white/10 rounded-xl transition-all hover:scale-105 active:scale-95"><ChevronRight size={16} strokeWidth={3} /></button>
           </div>
           <button
-            onClick={() => generateDailyReport(tasks, goals, settings, dateStr)}
+            onClick={() => generateDailyReport(tasks, goals, settings, dateStr, { applesEarned, applesUsedToday, totalTodayMins })}
             title="Download Daily PDF Report"
             className="flex items-center gap-2 px-4 py-2.5 bg-[#F0C040]/10 border border-[#F0C040]/30 text-[#F0C040] rounded-2xl text-xs font-black uppercase tracking-wider hover:bg-[#F0C040]/20 hover:border-[#F0C040]/60 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#F0C040]/5"
           >
