@@ -43,6 +43,10 @@ const useStore = create(
       settings: {
         userName: 'Prince',
       },
+      pomodoro: {
+        date: '',
+        applesUsed: 0,
+      },
       goalOrder: {
         ideas: ['g1'],
         planned: ['g2'],
@@ -239,6 +243,17 @@ const useStore = create(
           Object.assign(state.settings, updates)
         }),
 
+      // Pomodoro
+      useApple: () =>
+        set((state) => {
+          const today = new Date().toISOString().split('T')[0]
+          if (state.pomodoro.date !== today) {
+            state.pomodoro = { date: today, applesUsed: 1 }
+          } else {
+            state.pomodoro.applesUsed += 1
+          }
+        }),
+
       // Board
       // Board dragging
       moveGoalItem: (goalId, fromSection, toSection, toIndex) =>
@@ -273,6 +288,7 @@ const useStore = create(
         goals: state.goals,
         settings: state.settings,
         goalOrder: state.goalOrder,
+        pomodoro: state.pomodoro,
       }),
     }
   )

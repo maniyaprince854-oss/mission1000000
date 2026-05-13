@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { format } from 'date-fns'
-import { getTasksByDate, getTaskTotalTime, getGoalProgress } from './calculations'
+import { getGoalProgress } from './calculations'
 
 function hexToRgb(hex) {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
@@ -41,7 +41,8 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
   // Helper: time logged on dateStr only (not all-time total)
   const todayMins = (task) => (task.timeLog && task.timeLog[dateStr]) || 0
 
-  const dailyTasks = getTasksByDate(tasks, dateStr)
+  // Only tasks actually worked on that day (have time logged on dateStr)
+  const dailyTasks = tasks.filter(t => todayMins(t) > 0)
   const completedTasks = dailyTasks.filter(t => t.status === 'completed')
   const totalTime = dailyTasks.reduce((sum, t) => sum + todayMins(t), 0)
   const units = Math.round((totalTime / 50) * 10) / 10
@@ -333,7 +334,7 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
     const maxTime = Math.max(...tasksWithTime.map(t => todayMins(t)))
     const barAreaW = contentW - 80
 
-    tasksWithTime.slice(0, 10).forEach((task, i) => {
+    tasksWithTime.slice(0, 10).forEach((task) => {
       if (y > H - 30) return
       const time = todayMins(task)
       const goal = goals.find(g => g.id === task.goalId)

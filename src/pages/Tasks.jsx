@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { format, addDays, subDays, isToday, isTomorrow, isYesterday } from 'date-fns'
 import { Plus, Check, Circle, Trash2, Calendar, ChevronLeft, ChevronRight, Play, Pause, Clock, GripVertical, X, Edit2, FileText } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
@@ -19,13 +19,34 @@ export default function Tasks() {
   const [editingTitleId, setEditingTitleId] = useState(null)
   const [editedTitle, setEditedTitle] = useState('')
   
-  // Custom fast force timer just to update UI without global state churn for now
+  // UI tick — updates every second when break is active, every minute otherwise
   const [tick, setTick] = useState(0)
+  const [breakActive, setBreakActive] = useState(false)
+  const [breakSecsLeft, setBreakSecsLeft] = useState(0)
+  const breakIntervalRef = useRef(null)
 
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 60000)
     return () => clearInterval(interval)
   }, [])
+
+  // Break countdown — ticks every second while active
+  useEffect(() => {
+    if (breakActive) {
+      breakIntervalRef.current = setInterval(() => {
+        setBreakSecsLeft(s => {
+          if (s <= 1) {
+            setBreakActive(false)
+            return 0
+          }
+          return s - 1
+        })
+      }, 1000)
+    } else {
+      clearInterval(breakIntervalRef.current)
+    }
+    return () => clearInterval(breakIntervalRef.current)
+  }, [breakActive])
 
   const tasks = useStore((s) => s.tasks)
   const goals = useStore((s) => s.goals)
@@ -37,7 +58,9 @@ export default function Tasks() {
   const reorderTasks = useStore((s) => s.reorderTasks)
   const addManualTime = useStore((s) => s.addManualTime)
   const updateTask = useStore((s) => s.updateTask)
-  
+  const pomodoroState = useStore((s) => s.pomodoro)
+  const useApple = useStore((s) => s.useApple)
+
   const activeGoals = goals.filter((g) => g.status === 'active')
 
   const settings = useStore((s) => s.settings)
@@ -111,6 +134,23 @@ export default function Tasks() {
   const completedCount = dailyTasks.filter(t => t.status === 'completed').length
   const progressPct = dailyTasks.length === 0 ? 0 : Math.round((completedCount / dailyTasks.length) * 100)
 
+  // Pomodoro: total minutes worked today (logged + live running)
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const runningTask = tasks.find(t => t.isRunning)
+  const liveExtra = runningTask?.startTime ? Math.floor((Date.now() - runningTask.startTime) / 60000) : 0
+  const totalTodayMins = tasks.reduce((sum, t) => sum + ((t.timeLog?.[today]) || 0), 0) + liveExtra
+  const applesEarned = Math.floor(totalTodayMins / 50)
+  const applesUsedToday = pomodoroState.date === today ? pomodoroState.applesUsed : 0
+  const availableApples = Math.max(0, applesEarned - applesUsedToday)
+
+  const handleStartBreak = () => {
+    // Pause any running task before break
+    if (runningTask) pauseTask(runningTask.id)
+    useApple()
+    setBreakSecsLeft(600)
+    setBreakActive(true)
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto pb-24">
       {/* Header & Date Navigation */}
@@ -155,6 +195,74 @@ export default function Tasks() {
               <div className="absolute inset-0 bg-white/20 w-full animate-[pulse-ring_2s_ease-in-out_infinite]" />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Pomodoro Break Section */}
+      {(availableApples > 0 || breakActive) && (
+        <div className="mb-8">
+          {breakActive ? (
+            <div className="relative overflow-hidden bg-[#0a0a0a] border border-[#10b981]/40 rounded-2xl p-5 shadow-[0_0_40px_rgba(16,185,129,0.08)]">
+              <div className="absolute inset-0 bg-gradient-to-r from-[#10b981]/5 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#10b981]/40 to-transparent" />
+              <div className="relative flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2.5 mb-1.5">
+                    <span className="text-2xl leading-none">🍎</span>
+                    <span className="text-[#10b981] font-black text-sm uppercase tracking-widest">Break Time</span>
+                  </div>
+                  <p className="text-[#555] text-xs font-medium">Tasks locked · step away and recharge</p>
+                  {/* Break progress bar */}
+                  <div className="mt-4 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#10b981] rounded-full transition-all duration-1000 ease-linear shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                      style={{ width: `${(breakSecsLeft / 600) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-5xl font-black text-[#10b981] tabular-nums tracking-tight drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]">
+                    {String(Math.floor(breakSecsLeft / 60)).padStart(2, '0')}:{String(breakSecsLeft % 60).padStart(2, '0')}
+                  </div>
+                  <button
+                    onClick={() => setBreakActive(false)}
+                    className="mt-1.5 text-[10px] text-[#444] hover:text-[#888] font-bold uppercase tracking-widest transition-colors"
+                  >
+                    Skip Break
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="relative overflow-hidden bg-[#0a0a0a] border border-[#F0C040]/25 rounded-2xl p-4 shadow-[0_0_30px_rgba(240,192,64,0.05)]">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#F0C040]/30 to-transparent" />
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-black text-[#F0C040] uppercase tracking-widest mb-1">
+                    🏆 Break{availableApples > 1 ? 's' : ''} Earned
+                  </div>
+                  <p className="text-[#555] text-xs font-medium">
+                    {availableApples === 1
+                      ? `${totalTodayMins} min of deep work`
+                      : `${availableApples} × 50-min sessions done`
+                    } · tap an apple for a 10-min break
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {Array.from({ length: Math.min(availableApples, 6) }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={handleStartBreak}
+                      title="Take a 10-minute break"
+                      className="text-2xl leading-none hover:scale-125 active:scale-95 transition-transform duration-150 drop-shadow-[0_0_10px_rgba(240,192,64,0.3)] hover:drop-shadow-[0_0_16px_rgba(240,192,64,0.6)]"
+                    >
+                      🍎
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -380,12 +488,16 @@ export default function Tasks() {
                                     >
                                       <Plus size={14} />
                                     </button>
-                                    <button 
+                                    <button
                                       onClick={() => isRunning ? pauseTask(task.id) : startTask(task.id)}
-                                      className={`p-2 rounded-xl transition-all focus:outline-none flex items-center gap-1.5 
-                                        ${isRunning 
-                                          ? 'bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 opacity-100 border border-[#10b981]/30' 
-                                          : 'bg-[#1C1C1C] text-[#666] hover:text-white sm:opacity-0 group-hover:opacity-100 hover:bg-[#252525] border border-transparent'}`}
+                                      disabled={breakActive && !isRunning}
+                                      title={breakActive && !isRunning ? 'Break in progress — finish your rest first' : ''}
+                                      className={`p-2 rounded-xl transition-all focus:outline-none flex items-center gap-1.5
+                                        ${isRunning
+                                          ? 'bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 opacity-100 border border-[#10b981]/30'
+                                          : breakActive
+                                            ? 'bg-[#1C1C1C] text-[#333] border border-transparent cursor-not-allowed opacity-40'
+                                            : 'bg-[#1C1C1C] text-[#666] hover:text-white sm:opacity-0 group-hover:opacity-100 hover:bg-[#252525] border border-transparent'}`}
                                       aria-label={isRunning ? "Pause Task" : "Start Task"}
                                     >
                                       {isRunning ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
