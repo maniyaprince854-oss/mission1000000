@@ -38,9 +38,12 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
   const ALT_ROW = [244, 244, 244]
   const GREEN = [16, 185, 129]
 
+  // Helper: time logged on dateStr only (not all-time total)
+  const todayMins = (task) => (task.timeLog && task.timeLog[dateStr]) || 0
+
   const dailyTasks = getTasksByDate(tasks, dateStr)
   const completedTasks = dailyTasks.filter(t => t.status === 'completed')
-  const totalTime = dailyTasks.reduce((sum, t) => sum + getTaskTotalTime(t), 0)
+  const totalTime = dailyTasks.reduce((sum, t) => sum + todayMins(t), 0)
   const units = Math.round((totalTime / 50) * 10) / 10
   const activeGoals = goals.filter(g => g.status === 'active')
 
@@ -170,7 +173,7 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
 
       const isDone = task.status === 'completed'
       const goal = goals.find(g => g.id === task.goalId)
-      const time = getTaskTotalTime(task)
+      const time = todayMins(task)
       const rowBg = i % 2 === 0 ? LIGHT_BG : ALT_ROW
 
       doc.setFillColor(...rowBg)
@@ -244,7 +247,7 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
       { label: 'GOAL', x: margin + 6 },
       { label: 'TASKS', x: margin + 100 },
       { label: 'PROGRESS', x: margin + 122 },
-      { label: 'TIME SPENT', x: margin + 158 },
+      { label: 'TODAY TIME', x: margin + 158 },
     ]
 
     doc.setFont('helvetica', 'bold')
@@ -259,7 +262,11 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
         y = margin
       }
 
-      const { total, completed, percentage, totalTimeSpent } = getGoalProgress(goal.id, tasks)
+      const { total, completed, percentage } = getGoalProgress(goal.id, tasks)
+      // Time shown is today's contribution only
+      const totalTimeSpent = tasks
+        .filter(t => t.goalId === goal.id)
+        .reduce((sum, t) => sum + todayMins(t), 0)
       const [r, g, b] = hexToRgb(goal.color)
       const rowBg = i % 2 === 0 ? LIGHT_BG : ALT_ROW
 
@@ -310,25 +317,25 @@ export function generateDailyReport(tasks, goals, settings, dateStr) {
   }
 
   // ─── TIME BREAKDOWN ──────────────────────────────────────────────
-  const tasksWithTime = dailyTasks.filter(t => getTaskTotalTime(t) > 0)
+  const tasksWithTime = dailyTasks.filter(t => todayMins(t) > 0).sort((a, b) => todayMins(b) - todayMins(a))
   if (tasksWithTime.length > 0 && y < H - 60) {
     y += 10
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.setTextColor(...DARK)
-    doc.text('TIME BREAKDOWN', margin, y)
+    doc.text("TODAY'S TIME BREAKDOWN", margin, y)
     doc.setFillColor(...GOLD)
-    doc.rect(margin, y + 1.5, 36, 1, 'F')
+    doc.rect(margin, y + 1.5, 50, 1, 'F')
 
     y += 10
 
-    const maxTime = Math.max(...tasksWithTime.map(t => getTaskTotalTime(t)))
+    const maxTime = Math.max(...tasksWithTime.map(t => todayMins(t)))
     const barAreaW = contentW - 80
 
-    tasksWithTime.slice(0, 8).forEach((task, i) => {
+    tasksWithTime.slice(0, 10).forEach((task, i) => {
       if (y > H - 30) return
-      const time = getTaskTotalTime(task)
+      const time = todayMins(task)
       const goal = goals.find(g => g.id === task.goalId)
       const barColor = goal ? hexToRgb(goal.color) : GOLD
       const barW = Math.max((time / maxTime) * barAreaW, 2)

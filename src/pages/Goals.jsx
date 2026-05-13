@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Trash2, X, Calendar as CalIcon, Play, Pause, GripVertical, Check, ChevronDown, ChevronUp, Flag, Clock, Target, TrendingUp, BarChart3, Zap } from 'lucide-react'
+import { Pencil, Trash2, X, Calendar as CalIcon, Play, Pause, GripVertical, Check, ChevronDown, ChevronUp, Flag, Clock, Target, TrendingUp, BarChart3, Zap, ArrowRightLeft } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { format } from 'date-fns'
 import useStore from '../store'
@@ -40,11 +40,12 @@ function fmtTime(mins) {
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
-function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onTaskClick, onAddTask, onAddMilestone, onToggleMilestone, onDeleteMilestone, dragHandleProps }) {
+function GoalCard({ goal, tasks, allGoals, onEdit, onDelete, onStartTask, onPauseTask, onTaskClick, onAddTask, onAddMilestone, onToggleMilestone, onDeleteMilestone, onTransferTask, dragHandleProps }) {
   const [expanded, setExpanded] = useState(false)
   const [activeTab, setActiveTab] = useState('tasks')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newMilestone, setNewMilestone] = useState('')
+  const [transferTaskId, setTransferTaskId] = useState(null)
 
   const { total, completed, percentage, totalTimeSpent } = getGoalProgress(goal.id, tasks)
   const goalTasks = tasks.filter(t => t.goalId === goal.id)
@@ -227,37 +228,83 @@ function GoalCard({ goal, tasks, onEdit, onDelete, onStartTask, onPauseTask, onT
                               <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
-                                onClick={() => onTaskClick(t)}
-                                className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all
-                                  ${t.isRunning ? 'bg-[#10b981]/5 border-[#10b981]/20' : 'bg-[#141414] border-[#252525] hover:border-[#333]'}`}
+                                className={`rounded-xl border transition-all ${t.isRunning ? 'bg-[#10b981]/5 border-[#10b981]/20' : 'bg-[#141414] border-[#252525] hover:border-[#333]'}`}
                               >
-                                <div {...provided.dragHandleProps} onClick={e => e.stopPropagation()} className="text-[#333] hover:text-[#666] cursor-grab flex-shrink-0">
-                                  <GripVertical size={11} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className={`text-xs font-medium line-clamp-1 ${t.status === 'completed' ? 'text-[#555] line-through' : 'text-white'}`}>
-                                    {t.title}
+                                {/* Main task row */}
+                                <div
+                                  onClick={() => { if (!transferTaskId) onTaskClick(t) }}
+                                  className="flex items-center gap-2 p-2.5 cursor-pointer"
+                                >
+                                  <div {...provided.dragHandleProps} onClick={e => e.stopPropagation()} className="text-[#333] hover:text-[#666] cursor-grab flex-shrink-0">
+                                    <GripVertical size={11} />
                                   </div>
-                                  <div className="text-[9px] text-[#555] mt-0.5">{format(new Date(t.date), 'MMM d')}</div>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
-                                  {t.status !== 'completed' && (
-                                    <button
-                                      onClick={e => { e.stopPropagation(); t.isRunning ? onPauseTask(t.id) : onStartTask(t.id) }}
-                                      className={`p-1 rounded-full border transition-colors ${t.isRunning ? 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30' : 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/30'}`}
-                                    >
-                                      {t.isRunning ? <Pause size={9} className="fill-current" /> : <Play size={9} className="fill-current translate-x-px" />}
-                                    </button>
-                                  )}
-                                  {liveTime > 0 && (
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${t.isRunning ? 'text-[#10b981] bg-[#10b981]/10' : 'text-[#666] bg-[#1C1C1C]'}`}>
-                                      {liveTime}m
+                                  <div className="flex-1 min-w-0">
+                                    <div className={`text-xs font-medium line-clamp-1 ${t.status === 'completed' ? 'text-[#555] line-through' : 'text-white'}`}>
+                                      {t.title}
+                                    </div>
+                                    <div className="text-[9px] text-[#555] mt-0.5">{format(new Date(t.date), 'MMM d')}</div>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                    {t.status !== 'completed' && (
+                                      <button
+                                        onClick={() => t.isRunning ? onPauseTask(t.id) : onStartTask(t.id)}
+                                        className={`p-1 rounded-full border transition-colors ${t.isRunning ? 'bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30' : 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/30'}`}
+                                      >
+                                        {t.isRunning ? <Pause size={9} className="fill-current" /> : <Play size={9} className="fill-current translate-x-px" />}
+                                      </button>
+                                    )}
+                                    {liveTime > 0 && (
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${t.isRunning ? 'text-[#10b981] bg-[#10b981]/10' : 'text-[#666] bg-[#1C1C1C]'}`}>
+                                        {liveTime}m
+                                      </span>
+                                    )}
+                                    <span className={`text-[9px] font-bold w-4 text-center ${t.status === 'completed' ? 'text-[#10b981]' : 'text-[#444]'}`}>
+                                      {t.status === 'completed' ? '✓' : '○'}
                                     </span>
-                                  )}
-                                  <span className={`text-[9px] font-bold w-4 text-center ${t.status === 'completed' ? 'text-[#10b981]' : 'text-[#444]'}`}>
-                                    {t.status === 'completed' ? '✓' : '○'}
-                                  </span>
+                                    <button
+                                      onClick={() => setTransferTaskId(transferTaskId === t.id ? null : t.id)}
+                                      title="Transfer to another goal"
+                                      className={`p-1 rounded-lg transition-colors ${transferTaskId === t.id ? 'text-[#F0C040] bg-[#F0C040]/10' : 'text-[#333] hover:text-[#F0C040] hover:bg-[#1C1C1C]'}`}
+                                    >
+                                      <ArrowRightLeft size={10} />
+                                    </button>
+                                  </div>
                                 </div>
+
+                                {/* Transfer panel */}
+                                {transferTaskId === t.id && (
+                                  <div className="px-2.5 pb-2.5 pt-0" onClick={e => e.stopPropagation()}>
+                                    <div className="bg-[#0a0a0a] border border-[#252525] rounded-xl p-2.5">
+                                      <div className="text-[9px] text-[#555] font-bold uppercase tracking-wider mb-2">Transfer to:</div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {allGoals.filter(g => g.id !== goal.id).map(g => (
+                                          <button
+                                            key={g.id}
+                                            onClick={() => { onTransferTask(t.id, g.id); setTransferTaskId(null) }}
+                                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all hover:scale-105 active:scale-95"
+                                            style={{ backgroundColor: `${g.color}15`, borderColor: `${g.color}40`, color: g.color }}
+                                          >
+                                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+                                            {g.name.length > 16 ? g.name.slice(0, 14) + '…' : g.name}
+                                          </button>
+                                        ))}
+                                        <button
+                                          onClick={() => { onTransferTask(t.id, null); setTransferTaskId(null) }}
+                                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#252525] text-[10px] font-bold text-[#555] hover:text-white hover:border-[#444] transition-colors"
+                                        >
+                                          <div className="w-1.5 h-1.5 rounded-full border border-[#555]" />
+                                          No Goal
+                                        </button>
+                                        <button
+                                          onClick={() => setTransferTaskId(null)}
+                                          className="px-2 py-1.5 text-[9px] text-[#444] hover:text-[#888] transition-colors"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </Draggable>
@@ -520,6 +567,10 @@ export default function Goals() {
   const toggleMilestone = useStore(s => s.toggleMilestone)
   const deleteMilestone = useStore(s => s.deleteMilestone)
 
+  const handleTransferTask = (taskId, newGoalId) => {
+    updateTask(taskId, { goalId: newGoalId })
+  }
+
   const [showModal, setShowModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState(null)
   const [form, setForm] = useState(EMPTY)
@@ -702,6 +753,7 @@ export default function Goals() {
                         <GoalCard
                           goal={goal}
                           tasks={tasks}
+                          allGoals={goals}
                           onEdit={handleEdit}
                           onDelete={handleDelete}
                           onStartTask={startTask}
@@ -711,6 +763,7 @@ export default function Goals() {
                           onAddMilestone={addMilestone}
                           onToggleMilestone={toggleMilestone}
                           onDeleteMilestone={deleteMilestone}
+                          onTransferTask={handleTransferTask}
                           dragHandleProps={provided.dragHandleProps}
                         />
                       </div>
