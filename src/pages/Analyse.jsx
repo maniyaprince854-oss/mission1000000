@@ -606,26 +606,25 @@ export default function Analyse() {
       <div ref={containerRef} className="flex-1 relative overflow-hidden min-h-0">
 
         {/* ── Mobile stats strip ────────────────────────────────── */}
-        <div className="md:hidden flex items-center gap-3 px-3 pt-3 pb-0 flex-shrink-0">
+        <div className="md:hidden absolute top-0 left-0 right-0 z-10 bg-[#0C0C0C] flex items-center gap-2 px-3 py-2">
           {[
             { v: goals.length,  c: '#F0C040', l: 'Goals' },
             { v: tasks.length,  c: '#6366f1', l: 'Tasks'  },
             { v: doneCount,     c: '#10b981', l: 'Done'   },
           ].map(({ v, c, l }) => (
-            <div key={l} className="flex-1 bg-[#111] border border-[#1a1a1a] rounded-xl px-2 py-1.5 text-center">
-              <div className="text-sm font-black" style={{ color: c }}>{v}</div>
-              <div className="text-[8px] text-[#333] font-bold uppercase tracking-wide">{l}</div>
+            <div key={l} className="flex-1 bg-[#111] border border-[#1a1a1a] rounded-lg px-2 py-1 text-center">
+              <div className="text-xs font-black" style={{ color: c }}>{v}</div>
+              <div className="text-[7px] text-[#333] font-bold uppercase tracking-wide">{l}</div>
             </div>
           ))}
-          <div className="flex-1 bg-[#111] border border-[#1a1a1a] rounded-xl px-2 py-1.5 text-center">
-            <div className="text-sm font-black text-[#f59e0b]">{overallPct}%</div>
-            <div className="text-[8px] text-[#333] font-bold uppercase tracking-wide">Done</div>
+          <div className="flex-1 bg-[#111] border border-[#1a1a1a] rounded-lg px-2 py-1 text-center">
+            <div className="text-xs font-black text-[#f59e0b]">{overallPct}%</div>
+            <div className="text-[7px] text-[#333] font-bold uppercase tracking-wide">Done</div>
           </div>
         </div>
 
         {/* ── Top toolbar ──────────────────────────────────────────── */}
-        <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 flex-wrap md:top-3">
-          {/* on mobile push toolbar below the stats strip */}
+        <div className="absolute top-[54px] left-3 right-3 z-10 flex items-center gap-2 flex-wrap md:top-3">
           <div className="flex bg-[#141414]/90 backdrop-blur-sm border border-[#1E1E1E] rounded-xl p-1 gap-0.5">
             {['all', 'pending', 'completed'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
