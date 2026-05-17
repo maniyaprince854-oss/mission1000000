@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, CheckCircle2, Circle, ArrowRightLeft, ChevronDown } from 'lucide-react'
+import { X, CheckCircle2, Circle, ArrowRightLeft, ChevronDown, Plus, Minus, Maximize2 } from 'lucide-react'
 import { format } from 'date-fns'
 import useStore from '../store'
 import { getGoalProgress, getTaskTotalTime } from '../utils/calculations'
 
-const TASK_SPREAD = 1.15
+const TASK_SPREAD = 1.2
+const MIN_ZOOM = 0.2
+const MAX_ZOOM = 4.0
 
 function fmtMins(m) {
   if (!m) return '0m'
@@ -20,6 +22,10 @@ function curvePath(x1, y1, x2, y2) {
   return `M ${x1} ${y1} Q ${mx - dy * 0.12} ${my + dx * 0.12} ${x2} ${y2}`
 }
 
+function truncate(str, n) {
+  return str.length > n ? str.slice(0, n - 1) + '…' : str
+}
+
 export default function Analyse() {
   const tasks = useStore(s => s.tasks)
   const goals = useStore(s => s.goals)
@@ -32,6 +38,20 @@ export default function Analyse() {
   const [filter, setFilter] = useState('all')
   const [drag, setDrag] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+
+  // Stable refs so event listeners don't go stale
+  const zoomRef = useRef(1)
+  const panRef = useRef({ x: 0, y: 0 })
+  const dragRef = useRef(null)
+  const bgPanRef = useRef(null) // { startCX, startCY, startPX, startPY, moved }
+  const pinchRef = useRef(null) // { dist, zoom, panX, panY, midX, midY }
+  const goalNodesRef = useRef([])
+
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
+  useEffect(() => { panRef.current = pan }, [pan])
+  useEffect(() => { dragRef.current = drag }, [drag])
 
   useEffect(() => {
     const el = containerRef.current
@@ -43,17 +63,16 @@ export default function Analyse() {
     return () => ro.disconnect()
   }, [])
 
-  // Responsive sizing based on available canvas area
+  // Responsive sizes based on available canvas
   const minDim = Math.min(size.w, size.h)
-  const goalOrbit = Math.max(75, minDim * 0.34)
-  const taskOrbit = Math.max(40, minDim * 0.17)
-  const centerR  = Math.max(28, minDim * 0.065)
-  const goalR    = Math.max(20, minDim * 0.048)
-  const taskR    = Math.max(9,  minDim * 0.022)
+  const goalOrbit = Math.max(80, minDim * 0.35)
+  const taskOrbit = Math.max(44, minDim * 0.175)
+  const centerR   = Math.max(28, minDim * 0.065)
+  const goalR     = Math.max(22, minDim * 0.05)
+  const taskR     = Math.max(11, minDim * 0.025)
 
   const cx = size.w / 2
-  // Shift center slightly up on tall screens so labels have room at bottom
-  const cy = size.h * 0.48
+  const cy = size.h / 2
 
   const filteredTasks = tasks.filter(t => {
     if (filter === 'pending') return t.status === 'pending'
@@ -65,6 +84,7 @@ export default function Analyse() {
     const angle = (2 * Math.PI * i) / Math.max(1, goals.length) - Math.PI / 2
     return { ...goal, x: cx + goalOrbit * Math.cos(angle), y: cy + goalOrbit * Math.sin(angle), angle }
   })
+  goalNodesRef.current = goalNodes
 
   const taskNodes = goalNodes.flatMap(gn => {
     const gt = filteredTasks.filter(t => t.goalId === gn.id)
@@ -82,56 +102,175 @@ export default function Analyse() {
 
   const unassigned = filteredTasks.filter(t => !goalNodes.some(gn => gn.id === t.goalId))
 
-  const getSVGPos = (e) => {
+  // Screen coords → world coords
+  const screenToWorld = (sx, sy) => ({
+    x: (sx - panRef.current.x) / zoomRef.current,
+    y: (sy - panRef.current.y) / zoomRef.current,
+  })
+
+  const getEventPos = (e) => {
     const rect = svgRef.current?.getBoundingClientRect()
     if (!rect) return { x: 0, y: 0 }
-    // Handle touch events
     const src = e.touches?.[0] ?? e
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top }
+    return screenToWorld(src.clientX - rect.left, src.clientY - rect.top)
   }
+
+  // Zoom centered on a canvas point (screen coords)
+  const applyZoom = (newZ, originX, originY) => {
+    newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZ))
+    const cur = zoomRef.current
+    const p = panRef.current
+    const nx = originX - (originX - p.x) * (newZ / cur)
+    const ny = originY - (originY - p.y) * (newZ / cur)
+    setZoom(newZ)
+    setPan({ x: nx, y: ny })
+  }
+
+  const zoomIn  = () => applyZoom(zoomRef.current * 1.3, size.w / 2, size.h / 2)
+  const zoomOut = () => applyZoom(zoomRef.current * 0.77, size.w / 2, size.h / 2)
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }) }
+
+  // Wheel zoom (needs passive:false — attach via useEffect)
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const handler = (e) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const ox = e.clientX - rect.left
+      const oy = e.clientY - rect.top
+      applyZoom(zoomRef.current * (e.deltaY > 0 ? 0.9 : 1.1), ox, oy)
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, []) // stable — uses refs
+
+  // ── Mouse events ──────────────────────────────────────────────────────────
 
   const onTaskMouseDown = (e, taskId, goalId) => {
     e.preventDefault()
     e.stopPropagation()
-    const pos = getSVGPos(e)
+    const pos = getEventPos(e)
     setDrag({ taskId, goalId, x: pos.x, y: pos.y })
     setDropTarget(null)
   }
 
-  const onSVGMouseMove = (e) => {
-    if (!drag) return
-    const pos = getSVGPos(e)
-    setDrag(d => ({ ...d, x: pos.x, y: pos.y }))
-    const hovered = goalNodes.find(gn => Math.hypot(gn.x - pos.x, gn.y - pos.y) < goalR + 8)
-    setDropTarget(hovered?.id || null)
+  const onBgMouseDown = (e) => {
+    if (dragRef.current) return
+    bgPanRef.current = {
+      startCX: e.clientX, startCY: e.clientY,
+      startPX: panRef.current.x, startPY: panRef.current.y,
+      moved: false,
+    }
   }
 
-  const onSVGMouseUp = () => {
+  const onMouseMove = (e) => {
+    if (dragRef.current) {
+      const pos = getEventPos(e)
+      setDrag(d => ({ ...d, x: pos.x, y: pos.y }))
+      const hovered = goalNodesRef.current.find(
+        gn => Math.hypot(gn.x - pos.x, gn.y - pos.y) < goalR + 10
+      )
+      setDropTarget(hovered?.id || null)
+      return
+    }
+    if (bgPanRef.current) {
+      const dx = e.clientX - bgPanRef.current.startCX
+      const dy = e.clientY - bgPanRef.current.startCY
+      if (Math.hypot(dx, dy) > 4) bgPanRef.current.moved = true
+      if (bgPanRef.current.moved) {
+        setPan({ x: bgPanRef.current.startPX + dx, y: bgPanRef.current.startPY + dy })
+      }
+    }
+  }
+
+  const onMouseUp = () => {
+    const wasPanning = bgPanRef.current?.moved
+    bgPanRef.current = null
     if (drag && dropTarget && dropTarget !== drag.goalId) {
       updateTask(drag.taskId, { goalId: dropTarget })
       setSelected({ type: 'task', id: drag.taskId })
     }
     setDrag(null)
     setDropTarget(null)
+    return wasPanning
+  }
+
+  // ── Touch events ──────────────────────────────────────────────────────────
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const rect = svgRef.current?.getBoundingClientRect()
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      )
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - (rect?.left || 0)
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - (rect?.top || 0)
+      pinchRef.current = { dist, zoom: zoomRef.current, panX: panRef.current.x, panY: panRef.current.y, midX, midY }
+    } else if (e.touches.length === 1 && !dragRef.current) {
+      bgPanRef.current = {
+        startCX: e.touches[0].clientX, startCY: e.touches[0].clientY,
+        startPX: panRef.current.x, startPY: panRef.current.y,
+        moved: false,
+      }
+    }
+  }
+
+  const onTouchMove = (e) => {
+    e.preventDefault()
+    if (e.touches.length === 2 && pinchRef.current) {
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      )
+      const newZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchRef.current.zoom * (dist / pinchRef.current.dist)))
+      const ratio = newZ / pinchRef.current.zoom
+      setZoom(newZ)
+      setPan({
+        x: pinchRef.current.midX - (pinchRef.current.midX - pinchRef.current.panX) * ratio,
+        y: pinchRef.current.midY - (pinchRef.current.midY - pinchRef.current.panY) * ratio,
+      })
+    } else if (e.touches.length === 1) {
+      if (dragRef.current) {
+        const pos = getEventPos(e)
+        setDrag(d => ({ ...d, x: pos.x, y: pos.y }))
+        const hovered = goalNodesRef.current.find(
+          gn => Math.hypot(gn.x - pos.x, gn.y - pos.y) < goalR + 10
+        )
+        setDropTarget(hovered?.id || null)
+      } else if (bgPanRef.current) {
+        const dx = e.touches[0].clientX - bgPanRef.current.startCX
+        const dy = e.touches[0].clientY - bgPanRef.current.startCY
+        if (Math.hypot(dx, dy) > 4) bgPanRef.current.moved = true
+        if (bgPanRef.current.moved) {
+          setPan({ x: bgPanRef.current.startPX + dx, y: bgPanRef.current.startPY + dy })
+        }
+      }
+    }
+  }
+
+  const onTouchEnd = () => {
+    pinchRef.current = null
+    onMouseUp()
   }
 
   const selGoal = selected?.type === 'goal' ? goals.find(g => g.id === selected.id) : null
   const selTask = selected?.type === 'task' ? tasks.find(t => t.id === selected.id) : null
-
   const totalTime = tasks.reduce((s, t) => s + getTaskTotalTime(t), 0)
   const doneCount = tasks.filter(t => t.status === 'completed').length
-  const totalTasks = tasks.length
 
-  // Shared panel content (used in both side panel and mobile bottom sheet)
+  // ── Shared panel content ──────────────────────────────────────────────────
+
   const PanelContent = () => (
     <div className="space-y-4">
-      {/* Overview */}
       {!selected && (
         <>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: 'Goals', value: goals.length, color: '#F0C040' },
-              { label: 'Tasks', value: totalTasks, color: '#6366f1' },
+              { label: 'Tasks', value: tasks.length, color: '#6366f1' },
               { label: 'Done', value: doneCount, color: '#10b981' },
               { label: 'Time', value: fmtMins(totalTime), color: '#f59e0b' },
             ].map(({ label, value, color }) => (
@@ -147,7 +286,7 @@ export default function Analyse() {
               const p = getGoalProgress(gn.id, tasks)
               return (
                 <div key={gn.id}
-                  className="bg-[#111] border border-[#1a1a1a] rounded-xl p-3 cursor-pointer hover:border-[#222] transition-colors"
+                  className="bg-[#111] border border-[#1a1a1a] rounded-xl p-3 cursor-pointer hover:border-[#252525] transition-colors"
                   onClick={() => setSelected({ type: 'goal', id: gn.id })}
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -158,9 +297,9 @@ export default function Analyse() {
                     <span className="text-xs font-black ml-2 flex-shrink-0" style={{ color: gn.color }}>{p.percentage}%</span>
                   </div>
                   <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${p.percentage}%`, backgroundColor: gn.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${p.percentage}%`, backgroundColor: gn.color }} />
                   </div>
-                  <div className="flex justify-between mt-1.5 text-[9px] text-[#333] font-bold">
+                  <div className="flex justify-between mt-1.5 text-[9px] text-[#2a2a2a] font-bold">
                     <span>{p.completed}/{p.total} tasks</span>
                     <span>{fmtMins(p.totalTimeSpent)}</span>
                   </div>
@@ -171,7 +310,6 @@ export default function Analyse() {
         </>
       )}
 
-      {/* Goal details */}
       {selGoal && (() => {
         const p = getGoalProgress(selGoal.id, tasks)
         const goalTasks = tasks.filter(t => t.goalId === selGoal.id)
@@ -195,21 +333,21 @@ export default function Analyse() {
               ))}
             </div>
             <div className="h-1.5 bg-[#141414] rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all" style={{ width: `${p.percentage}%`, backgroundColor: selGoal.color }} />
+              <div className="h-full rounded-full" style={{ width: `${p.percentage}%`, backgroundColor: selGoal.color }} />
             </div>
             <div className="space-y-1.5">
               <div className="text-[9px] font-black text-[#333] uppercase tracking-widest">Tasks ({goalTasks.length})</div>
-              {goalTasks.length === 0 && <div className="text-center py-4 text-[#2a2a2a] text-xs">No tasks assigned</div>}
+              {goalTasks.length === 0 && <div className="text-center py-4 text-[#222] text-xs">No tasks assigned</div>}
               {goalTasks.map(t => (
                 <div key={t.id} onClick={() => setSelected({ type: 'task', id: t.id })}
-                  className="flex items-center gap-2 px-3 py-2 bg-[#111] rounded-xl border border-[#1a1a1a] cursor-pointer hover:border-[#222] transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 bg-[#111] rounded-xl border border-[#1a1a1a] cursor-pointer hover:border-[#252525] transition-colors"
                 >
                   {t.status === 'completed'
                     ? <CheckCircle2 size={13} className="text-[#10b981] flex-shrink-0" />
                     : <Circle size={13} className="text-[#2a2a2a] flex-shrink-0" />
                   }
                   <span className="text-xs text-[#666] flex-1 truncate">{t.title}</span>
-                  {getTaskTotalTime(t) > 0 && <span className="text-[9px] text-[#333] font-bold flex-shrink-0">{getTaskTotalTime(t)}m</span>}
+                  {getTaskTotalTime(t) > 0 && <span className="text-[9px] text-[#333] font-bold">{getTaskTotalTime(t)}m</span>}
                 </div>
               ))}
             </div>
@@ -217,7 +355,6 @@ export default function Analyse() {
         )
       })()}
 
-      {/* Task details */}
       {selTask && (() => {
         const taskGoal = goals.find(g => g.id === selTask.goalId)
         const mins = getTaskTotalTime(selTask)
@@ -251,20 +388,20 @@ export default function Analyse() {
                 {goals.filter(g => g.id !== selTask.goalId).map(g => (
                   <button key={g.id}
                     onClick={() => { updateTask(selTask.id, { goalId: g.id }); setSelected({ type: 'task', id: selTask.id }) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 bg-[#111] border border-[#1a1a1a] rounded-xl text-xs text-[#555] hover:text-white hover:border-[#222] transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-[#111] border border-[#1a1a1a] rounded-xl text-xs text-[#555] hover:text-white hover:border-[#252525] transition-all text-left group"
                   >
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
                     <span className="truncate flex-1">{g.name}</span>
-                    <ArrowRightLeft size={10} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRightLeft size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
                 ))}
                 {selTask.goalId && (
                   <button onClick={() => { updateTask(selTask.id, { goalId: null }); setSelected({ type: 'task', id: selTask.id }) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 bg-[#111] border border-[#1a1a1a] rounded-xl text-xs text-[#333] hover:text-white hover:border-[#222] transition-all text-left group"
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-[#111] border border-[#1a1a1a] rounded-xl text-xs text-[#333] hover:text-white hover:border-[#252525] transition-all text-left group"
                   >
                     <div className="w-2 h-2 rounded-full flex-shrink-0 bg-[#2a2a2a]" />
                     <span className="flex-1">Unassign from goal</span>
-                    <X size={10} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <X size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
                 )}
               </div>
@@ -288,13 +425,20 @@ export default function Analyse() {
     </div>
   )
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const labelFontSize = Math.max(7, taskR * 0.75)
+  const goalLabelFontSize = Math.max(8, goalR * 0.38)
+
   return (
     <div className="flex flex-col md:flex-row h-full bg-[#0C0C0C] overflow-hidden relative">
-      {/* SVG Canvas — fills all space on mobile, left portion on desktop */}
+
+      {/* ── SVG Canvas ─────────────────────────────────────────────────────── */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden min-h-0">
+
         {/* Filter bar */}
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-          <div className="flex bg-[#141414] border border-[#1E1E1E] rounded-xl p-1 gap-0.5">
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 flex-wrap">
+          <div className="flex bg-[#141414]/90 backdrop-blur-sm border border-[#1E1E1E] rounded-xl p-1 gap-0.5">
             {['all', 'pending', 'completed'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wide transition-all ${
@@ -305,27 +449,48 @@ export default function Analyse() {
               </button>
             ))}
           </div>
-          <span className="hidden sm:block text-[#2a2a2a] text-xs font-bold">
+          <span className="hidden sm:block text-[#252525] text-xs font-bold">
             {taskNodes.length + unassigned.length} tasks · {goals.length} goals
           </span>
         </div>
 
+        {/* Zoom controls */}
+        <div className="absolute bottom-4 right-4 z-10 flex flex-col gap-1.5">
+          <button onClick={zoomIn}
+            className="w-9 h-9 bg-[#141414]/90 backdrop-blur-sm border border-[#1E1E1E] rounded-xl flex items-center justify-center text-[#555] hover:text-white hover:border-[#2a2a2a] transition-all active:scale-95"
+          ><Plus size={15} /></button>
+          <button onClick={zoomOut}
+            className="w-9 h-9 bg-[#141414]/90 backdrop-blur-sm border border-[#1E1E1E] rounded-xl flex items-center justify-center text-[#555] hover:text-white hover:border-[#2a2a2a] transition-all active:scale-95"
+          ><Minus size={15} /></button>
+          <button onClick={resetView}
+            className="w-9 h-9 bg-[#141414]/90 backdrop-blur-sm border border-[#1E1E1E] rounded-xl flex items-center justify-center text-[#555] hover:text-white hover:border-[#2a2a2a] transition-all active:scale-95"
+            title="Reset view"
+          ><Maximize2 size={13} /></button>
+          {/* Zoom % badge */}
+          <div className="text-center text-[9px] font-black text-[#333] tabular-nums">
+            {Math.round(zoom * 100)}%
+          </div>
+        </div>
+
         {/* Drag hint — desktop only */}
-        <div className="hidden md:block absolute bottom-4 left-4 z-10 text-[#222] text-[10px] font-bold uppercase tracking-widest">
-          Drag tasks between goals to reassign
+        <div className="hidden md:block absolute bottom-4 left-4 z-10 text-[#1e1e1e] text-[10px] font-bold uppercase tracking-widest">
+          Scroll to zoom · drag background to pan · drag tasks to reassign
         </div>
 
         <svg
           ref={svgRef}
           width={size.w}
           height={size.h}
-          onMouseMove={onSVGMouseMove}
-          onMouseUp={onSVGMouseUp}
-          onMouseLeave={onSVGMouseUp}
-          onTouchMove={(e) => { e.preventDefault(); onSVGMouseMove(e) }}
-          onTouchEnd={onSVGMouseUp}
-          onClick={() => { if (!drag) setSelected(null) }}
+          onMouseDown={onBgMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onClick={() => { if (!bgPanRef.current?.moved && !drag) setSelected(null) }}
           className="select-none touch-none"
+          style={{ cursor: bgPanRef.current?.moved ? 'grabbing' : 'default' }}
         >
           <defs>
             <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
@@ -339,163 +504,199 @@ export default function Analyse() {
             <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
               <circle cx="1" cy="1" r="0.7" fill="#181818" />
             </pattern>
-            <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#F0C040" stopOpacity="0.12" />
+            <radialGradient id="cGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#F0C040" stopOpacity="0.1" />
               <stop offset="100%" stopColor="#F0C040" stopOpacity="0" />
             </radialGradient>
           </defs>
 
+          {/* Static background — not affected by zoom/pan */}
           <rect width={size.w} height={size.h} fill="url(#dots)" />
-          <circle cx={cx} cy={cy} r={goalOrbit * 0.9} fill="url(#centerGlow)" />
-          <circle cx={cx} cy={cy} r={goalOrbit} fill="none" stroke="#1a1a1a" strokeWidth={1} strokeDasharray="4 6" />
 
-          {/* center → goals */}
-          {goalNodes.map(gn => (
-            <path key={`cl-${gn.id}`} d={curvePath(cx, cy, gn.x, gn.y)}
-              stroke={gn.color} strokeWidth={1.5} strokeOpacity={0.12} fill="none" />
-          ))}
+          {/* Everything below is zoomed + panned */}
+          <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
 
-          {/* goals → tasks */}
-          {taskNodes.map(tn => {
-            if (drag?.taskId === tn.id) return null
-            const gn = goalNodes.find(g => g.id === tn.goalId)
-            if (!gn) return null
-            return (
-              <path key={`tl-${tn.id}`} d={curvePath(gn.x, gn.y, tn.x, tn.y)}
-                stroke={tn.goalColor} strokeWidth={1} strokeOpacity={0.15} fill="none" />
-            )
-          })}
+            {/* Center glow */}
+            <circle cx={cx} cy={cy} r={goalOrbit * 0.9} fill="url(#cGlow)" />
+            {/* Orbit ring */}
+            <circle cx={cx} cy={cy} r={goalOrbit} fill="none" stroke="#1a1a1a" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom} ${6 / zoom}`} />
 
-          {/* Drag ghost line */}
-          {drag && (() => {
-            const sg = goalNodes.find(g => g.id === drag.goalId)
-            if (!sg) return null
-            return <line x1={sg.x} y1={sg.y} x2={drag.x} y2={drag.y}
-              stroke="#F0C040" strokeWidth={1.5} strokeDasharray="5 3" strokeOpacity={0.5} />
-          })()}
+            {/* center → goals */}
+            {goalNodes.map(gn => (
+              <path key={`cl-${gn.id}`} d={curvePath(cx, cy, gn.x, gn.y)}
+                stroke={gn.color} strokeWidth={1.5 / zoom} strokeOpacity={0.12} fill="none" />
+            ))}
 
-          {/* Task nodes */}
-          {taskNodes.map(tn => {
-            const isDragging = drag?.taskId === tn.id
-            const isSelected = selected?.type === 'task' && selected?.id === tn.id
-            const isDone = tn.status === 'completed'
-            const mins = getTaskTotalTime(tn)
-            const tx = isDragging ? drag.x : tn.x
-            const ty = isDragging ? drag.y : tn.y
-            const r = taskR
+            {/* goals → tasks */}
+            {taskNodes.map(tn => {
+              if (drag?.taskId === tn.id) return null
+              const gn = goalNodes.find(g => g.id === tn.goalId)
+              if (!gn) return null
+              return (
+                <path key={`tl-${tn.id}`} d={curvePath(gn.x, gn.y, tn.x, tn.y)}
+                  stroke={tn.goalColor} strokeWidth={1 / zoom} strokeOpacity={0.15} fill="none" />
+              )
+            })}
 
-            return (
-              <g key={tn.id} transform={`translate(${tx},${ty})`}
-                onMouseDown={(e) => onTaskMouseDown(e, tn.id, tn.goalId)}
-                onTouchStart={(e) => onTaskMouseDown(e, tn.id, tn.goalId)}
-                onClick={(e) => { e.stopPropagation(); if (!drag) setSelected({ type: 'task', id: tn.id }) }}
-                style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-              >
-                {isSelected && <circle r={r + 7} fill="none" stroke={tn.goalColor} strokeWidth={1.5} strokeOpacity={0.35} />}
-                <circle r={r}
-                  fill={isDone ? '#111' : `${tn.goalColor}18`}
-                  stroke={tn.goalColor}
-                  strokeWidth={isDragging ? 2.5 : isSelected ? 2 : 1.2}
-                  strokeOpacity={isDone ? 0.2 : isDragging ? 1 : 0.6}
-                  filter={isDragging ? 'url(#softglow)' : undefined}
-                />
-                {isDone
-                  ? <circle r={r * 0.38} fill="#10b981" />
-                  : mins > 0
-                    ? <text x={0} y={r * 0.28} textAnchor="middle" fontSize={Math.max(6, r * 0.6)} fill={tn.goalColor} fontWeight="bold" fontFamily="monospace">{mins}m</text>
-                    : <circle r={r * 0.28} fill={tn.goalColor} fillOpacity={0.45} />
-                }
-                <title>{tn.title}{mins > 0 ? ` · ${fmtMins(mins)}` : ''}</title>
-              </g>
-            )
-          })}
+            {/* Drag ghost line */}
+            {drag && (() => {
+              const sg = goalNodes.find(g => g.id === drag.goalId)
+              if (!sg) return null
+              return <line x1={sg.x} y1={sg.y} x2={drag.x} y2={drag.y}
+                stroke="#F0C040" strokeWidth={1.5 / zoom} strokeDasharray={`${5 / zoom} ${3 / zoom}`} strokeOpacity={0.6} />
+            })()}
 
-          {/* Goal nodes */}
-          {goalNodes.map(gn => {
-            const progress = getGoalProgress(gn.id, tasks)
-            const isSelected = selected?.type === 'goal' && selected?.id === gn.id
-            const isDropTarget = dropTarget === gn.id
-            const R = goalR
-            const circ = 2 * Math.PI * (R - R * 0.18)
-            const dashOff = circ * (1 - progress.percentage / 100)
+            {/* Task nodes */}
+            {taskNodes.map(tn => {
+              const isDragging = drag?.taskId === tn.id
+              const isSelected = selected?.type === 'task' && selected?.id === tn.id
+              const isDone = tn.status === 'completed'
+              const mins = getTaskTotalTime(tn)
+              const tx = isDragging ? drag.x : tn.x
+              const ty = isDragging ? drag.y : tn.y
+              const r = taskR
 
-            return (
-              <g key={gn.id} transform={`translate(${gn.x},${gn.y})`}
-                onClick={(e) => { e.stopPropagation(); setSelected({ type: 'goal', id: gn.id }) }}
-                style={{ cursor: 'pointer' }}
-              >
-                {isDropTarget && (
-                  <circle r={R + 12} fill={`${gn.color}10`} stroke={gn.color} strokeWidth={2} strokeOpacity={0.6} filter="url(#glow)" />
-                )}
-                {isSelected && (
-                  <circle r={R + 8} fill="none" stroke={gn.color} strokeWidth={1.5} strokeOpacity={0.25} strokeDasharray="4 4" />
-                )}
-                <circle r={R} fill="#111" stroke={gn.color}
-                  strokeWidth={isSelected ? 2.5 : 1.5}
-                  strokeOpacity={isSelected ? 0.9 : 0.5}
-                />
-                <circle r={R - R * 0.18} fill="none" stroke={gn.color} strokeWidth={Math.max(2, R * 0.12)}
-                  strokeDasharray={circ} strokeDashoffset={dashOff}
-                  strokeLinecap="round" strokeOpacity={0.65} transform="rotate(-90)"
-                />
-                <text x={0} y={-R * 0.18} textAnchor="middle" fontSize={Math.max(8, R * 0.42)} fill={gn.color} fontWeight="900" fontFamily="monospace">
-                  {progress.percentage}%
-                </text>
-                <text x={0} y={R * 0.32} textAnchor="middle" fontSize={Math.max(5, R * 0.26)} fill="#555" fontFamily="monospace">
-                  {progress.completed}/{progress.total}
-                </text>
-                <text x={0} y={R + Math.max(11, R * 0.45)} textAnchor="middle"
-                  fontSize={Math.max(7, R * 0.32)} fill="#777" fontWeight="bold"
+              return (
+                <g key={tn.id} transform={`translate(${tx},${ty})`}
+                  onMouseDown={(e) => { e.stopPropagation(); onTaskMouseDown(e, tn.id, tn.goalId) }}
+                  onTouchStart={(e) => { e.stopPropagation(); onTaskMouseDown(e, tn.id, tn.goalId) }}
+                  onClick={(e) => { e.stopPropagation(); if (!drag) setSelected({ type: 'task', id: tn.id }) }}
+                  style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                 >
-                  {gn.name.length > 16 ? gn.name.slice(0, 15) + '…' : gn.name}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* Center node */}
-          <g transform={`translate(${cx},${cy})`}
-            onClick={(e) => { e.stopPropagation(); setSelected(null) }}
-            style={{ cursor: 'pointer' }}
-          >
-            <circle r={centerR} fill="#0d0d00" stroke="#F0C040" strokeWidth={2} strokeOpacity={0.7} />
-            <circle r={centerR - 4} fill="none" stroke="#F0C040" strokeWidth={0.5} strokeOpacity={0.18} strokeDasharray="3 5" />
-            <text x={0} y={-centerR * 0.12} textAnchor="middle"
-              fontSize={Math.max(7, centerR * 0.35)} fill="#F0C040" fontWeight="900" fontFamily="monospace" letterSpacing={1}
-            >MISSION</text>
-            <text x={0} y={centerR * 0.28} textAnchor="middle"
-              fontSize={Math.max(7, centerR * 0.35)} fill="#F0C040" fontWeight="900" fontFamily="monospace" letterSpacing={1}
-            >10000</text>
-          </g>
-
-          {/* Unassigned tasks cluster */}
-          {unassigned.length > 0 && (
-            <>
-              <text x={10} y={size.h - unassigned.length > 5 ? 90 : 60} fontSize={7} fill="#2a2a2a" fontWeight="bold" letterSpacing={1}>
-                UNASSIGNED ({unassigned.length})
-              </text>
-              {unassigned.map((t, i) => {
-                const ux = 16 + (i % 5) * (taskR * 2 + 6)
-                const uy = size.h - 44 + Math.floor(i / 5) * (taskR * 2 + 6)
-                const isSelected = selected?.type === 'task' && selected?.id === t.id
-                return (
-                  <g key={t.id} transform={`translate(${ux},${uy})`}
-                    onClick={(e) => { e.stopPropagation(); setSelected({ type: 'task', id: t.id }) }}
-                    style={{ cursor: 'pointer' }}
+                  {isSelected && (
+                    <circle r={r + 7} fill="none" stroke={tn.goalColor} strokeWidth={1.5 / zoom} strokeOpacity={0.4} />
+                  )}
+                  <circle r={r}
+                    fill={isDone ? '#111' : `${tn.goalColor}1a`}
+                    stroke={tn.goalColor}
+                    strokeWidth={(isDragging ? 2.5 : isSelected ? 2 : 1.5) / zoom}
+                    strokeOpacity={isDone ? 0.25 : isDragging ? 1 : 0.7}
+                    filter={isDragging ? 'url(#softglow)' : undefined}
+                  />
+                  {/* Status indicator */}
+                  {isDone
+                    ? <circle r={r * 0.36} fill="#10b981" />
+                    : mins > 0
+                      ? <text x={0} y={r * 0.3} textAnchor="middle" fontSize={r * 0.58} fill={tn.goalColor} fontWeight="bold" fontFamily="monospace">{mins}m</text>
+                      : <circle r={r * 0.28} fill={tn.goalColor} fillOpacity={0.5} />
+                  }
+                  {/* Task name label */}
+                  <text
+                    x={0} y={r + labelFontSize + 3}
+                    textAnchor="middle"
+                    fontSize={labelFontSize}
+                    fill={isSelected ? tn.goalColor : isDone ? '#444' : '#666'}
+                    fontWeight={isSelected ? 'bold' : 'normal'}
+                    style={{ pointerEvents: 'none' }}
                   >
-                    {isSelected && <circle r={taskR + 6} fill="none" stroke="#444" strokeWidth={1.5} />}
-                    <circle r={taskR} fill="#111" stroke="#2a2a2a" strokeWidth={1.2} />
-                    {t.status === 'completed' ? <circle r={taskR * 0.35} fill="#10b981" /> : <circle r={taskR * 0.28} fill="#2a2a2a" />}
-                    <title>{t.title}</title>
-                  </g>
-                )
-              })}
-            </>
-          )}
+                    {truncate(tn.title, 14)}
+                  </text>
+                </g>
+              )
+            })}
+
+            {/* Goal nodes */}
+            {goalNodes.map(gn => {
+              const progress = getGoalProgress(gn.id, tasks)
+              const isSelected = selected?.type === 'goal' && selected?.id === gn.id
+              const isDropTarget = dropTarget === gn.id
+              const R = goalR
+              const innerR = R - R * 0.2
+              const circ = 2 * Math.PI * innerR
+              const dashOff = circ * (1 - progress.percentage / 100)
+              const sw = Math.max(2, R * 0.13)
+
+              return (
+                <g key={gn.id} transform={`translate(${gn.x},${gn.y})`}
+                  onClick={(e) => { e.stopPropagation(); setSelected({ type: 'goal', id: gn.id }) }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {isDropTarget && (
+                    <circle r={R + 14} fill={`${gn.color}12`} stroke={gn.color} strokeWidth={2 / zoom} strokeOpacity={0.7} filter="url(#glow)" />
+                  )}
+                  {isSelected && (
+                    <circle r={R + 9} fill="none" stroke={gn.color} strokeWidth={1.5 / zoom} strokeOpacity={0.3} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />
+                  )}
+                  <circle r={R} fill="#111" stroke={gn.color}
+                    strokeWidth={(isSelected ? 2.5 : 1.5) / zoom}
+                    strokeOpacity={isSelected ? 0.9 : 0.55}
+                  />
+                  {/* Progress arc */}
+                  <circle r={innerR} fill="none" stroke={gn.color} strokeWidth={sw / zoom}
+                    strokeDasharray={circ} strokeDashoffset={dashOff}
+                    strokeLinecap="round" strokeOpacity={0.7} transform="rotate(-90)"
+                  />
+                  {/* % label */}
+                  <text x={0} y={-R * 0.15} textAnchor="middle"
+                    fontSize={Math.max(9, R * 0.44)} fill={gn.color} fontWeight="900" fontFamily="monospace"
+                  >
+                    {progress.percentage}%
+                  </text>
+                  {/* done/total */}
+                  <text x={0} y={R * 0.35} textAnchor="middle"
+                    fontSize={Math.max(6, R * 0.27)} fill="#555" fontFamily="monospace"
+                  >
+                    {progress.completed}/{progress.total}
+                  </text>
+                  {/* Goal name — always visible */}
+                  <text x={0} y={R + goalLabelFontSize + 5} textAnchor="middle"
+                    fontSize={goalLabelFontSize} fill={isSelected ? gn.color : '#888'} fontWeight="bold"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {truncate(gn.name, 18)}
+                  </text>
+                </g>
+              )
+            })}
+
+            {/* Center node */}
+            <g transform={`translate(${cx},${cy})`}
+              onClick={(e) => { e.stopPropagation(); setSelected(null) }}
+              style={{ cursor: 'pointer' }}
+            >
+              <circle r={centerR} fill="#0d0d00" stroke="#F0C040" strokeWidth={2 / zoom} strokeOpacity={0.75} />
+              <circle r={centerR - 4} fill="none" stroke="#F0C040" strokeWidth={0.5 / zoom} strokeOpacity={0.15} strokeDasharray={`${3 / zoom} ${5 / zoom}`} />
+              <text x={0} y={-centerR * 0.1} textAnchor="middle"
+                fontSize={Math.max(8, centerR * 0.34)} fill="#F0C040" fontWeight="900" fontFamily="monospace" letterSpacing={1}
+              >MISSION</text>
+              <text x={0} y={centerR * 0.3} textAnchor="middle"
+                fontSize={Math.max(8, centerR * 0.34)} fill="#F0C040" fontWeight="900" fontFamily="monospace" letterSpacing={1}
+              >10000</text>
+            </g>
+
+            {/* Unassigned cluster */}
+            {unassigned.length > 0 && (
+              <>
+                <text x={12} y={size.h - 68} fontSize={7} fill="#252525" fontWeight="bold" letterSpacing={1}>
+                  UNASSIGNED ({unassigned.length})
+                </text>
+                {unassigned.map((t, i) => {
+                  const ux = 20 + (i % 5) * (taskR * 2.2 + 8)
+                  const uy = size.h - 48 + Math.floor(i / 5) * (taskR * 2.2 + 8)
+                  const isSel = selected?.type === 'task' && selected?.id === t.id
+                  return (
+                    <g key={t.id} transform={`translate(${ux},${uy})`}
+                      onClick={(e) => { e.stopPropagation(); setSelected({ type: 'task', id: t.id }) }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {isSel && <circle r={taskR + 6} fill="none" stroke="#444" strokeWidth={1.5 / zoom} />}
+                      <circle r={taskR} fill="#111" stroke="#2a2a2a" strokeWidth={1.2 / zoom} />
+                      {t.status === 'completed' ? <circle r={taskR * 0.34} fill="#10b981" /> : <circle r={taskR * 0.28} fill="#252525" />}
+                      <text x={0} y={taskR + labelFontSize + 2} textAnchor="middle" fontSize={labelFontSize} fill="#333" style={{ pointerEvents: 'none' }}>
+                        {truncate(t.title, 10)}
+                      </text>
+                      <title>{t.title}</title>
+                    </g>
+                  )
+                })}
+              </>
+            )}
+
+          </g>{/* end zoom group */}
         </svg>
       </div>
 
-      {/* Desktop side panel — hidden on mobile */}
+      {/* ── Desktop side panel ─────────────────────────────────────────────── */}
       <div className="hidden md:flex w-72 xl:w-80 border-l border-[#1E1E1E] bg-[#080808] flex-col overflow-hidden flex-shrink-0">
         <div className="px-5 py-4 border-b border-[#1E1E1E] flex items-center justify-between flex-shrink-0">
           <h2 className="text-[11px] font-black text-[#555] uppercase tracking-widest">
@@ -512,23 +713,15 @@ export default function Analyse() {
         </div>
       </div>
 
-      {/* Mobile bottom sheet — shown when a node is selected */}
+      {/* ── Mobile bottom sheet ────────────────────────────────────────────── */}
       {selected && (
         <div className="md:hidden fixed inset-0 z-40 flex flex-col justify-end pointer-events-none">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto"
-            onClick={() => setSelected(null)}
-          />
-          {/* Sheet */}
-          <div className="relative bg-[#0a0a0a] border-t border-[#1E1E1E] rounded-t-2xl max-h-[60vh] flex flex-col pointer-events-auto shadow-2xl">
-            {/* Handle + header */}
-            <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-[#1a1a1a] flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-1 bg-[#2a2a2a] rounded-full mx-auto" />
-              </div>
-              <h2 className="text-[11px] font-black text-[#555] uppercase tracking-widest absolute left-1/2 -translate-x-1/2">
-                {selGoal ? 'Goal' : 'Task'}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto" onClick={() => setSelected(null)} />
+          <div className="relative bg-[#0a0a0a] border-t border-[#1E1E1E] rounded-t-2xl max-h-[65vh] flex flex-col pointer-events-auto shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a] flex-shrink-0">
+              <div className="w-8 h-1 bg-[#2a2a2a] rounded-full absolute left-1/2 -translate-x-1/2 top-2" />
+              <h2 className="text-[11px] font-black text-[#555] uppercase tracking-widest">
+                {selGoal ? 'Goal Details' : 'Task Details'}
               </h2>
               <button onClick={() => setSelected(null)} className="p-1 text-[#333] hover:text-white ml-auto">
                 <ChevronDown size={18} />
@@ -540,6 +733,7 @@ export default function Analyse() {
           </div>
         </div>
       )}
+
     </div>
   )
 }
