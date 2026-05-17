@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, Target, Kanban, Settings, Activity } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Target, Kanban, Settings, Activity, GitBranch } from 'lucide-react'
 import useStore from '../store'
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/goals', icon: Target, label: 'Goals' },
   { to: '/planning', icon: Kanban, label: 'Planning' },
   { to: '/units', icon: Activity, label: 'Units' },
+  { to: '/analyse', icon: GitBranch, label: 'Analyse' },
 ]
 
 const bottomItems = [

@@ -7,6 +7,7 @@ import Goals from './pages/Goals'
 import Planning from './pages/Planning'
 import Settings from './pages/Settings'
 import Units from './pages/Units'
+import Analyse from './pages/Analyse'
 import useStore from './store'
 import useLockScreenControls from './hooks/useLockScreenControls'
 
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="goals" element={<Goals />} />
           <Route path="planning" element={<Planning />} />
           <Route path="units" element={<Units />} />
+          <Route path="analyse" element={<Analyse />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

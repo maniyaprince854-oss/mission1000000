@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { format, addDays, subDays, isToday, isTomorrow, isYesterday } from 'date-fns'
 import { Plus, Check, Circle, Trash2, Calendar, ChevronLeft, ChevronRight, Play, Pause, Clock, GripVertical, X, Edit2, FileText } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
@@ -20,33 +20,26 @@ export default function Tasks() {
   const [editedTitle, setEditedTitle] = useState('')
   
   // UI tick — updates every second when break is active, every minute otherwise
-  const [tick, setTick] = useState(0)
+  const [, setTick] = useState(0)
   const [breakActive, setBreakActive] = useState(false)
-  const [breakSecsLeft, setBreakSecsLeft] = useState(0)
-  const breakIntervalRef = useRef(null)
+  const [breakEndTime, setBreakEndTime] = useState(null)
 
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 60000)
     return () => clearInterval(interval)
   }, [])
 
-  // Break countdown — ticks every second while active
+  // Auto-dismiss break when time is up
   useEffect(() => {
-    if (breakActive) {
-      breakIntervalRef.current = setInterval(() => {
-        setBreakSecsLeft(s => {
-          if (s <= 1) {
-            setBreakActive(false)
-            return 0
-          }
-          return s - 1
-        })
-      }, 1000)
-    } else {
-      clearInterval(breakIntervalRef.current)
-    }
-    return () => clearInterval(breakIntervalRef.current)
-  }, [breakActive])
+    if (!breakEndTime) return
+    const ms = breakEndTime - Date.now()
+    if (ms <= 0) { setBreakActive(false); setBreakEndTime(null); return }
+    const timer = setTimeout(() => {
+      setBreakActive(false)
+      setBreakEndTime(null)
+    }, ms)
+    return () => clearTimeout(timer)
+  }, [breakEndTime])
 
   const tasks = useStore((s) => s.tasks)
   const goals = useStore((s) => s.goals)
@@ -144,10 +137,9 @@ export default function Tasks() {
   const availableApples = Math.max(0, applesEarned - applesUsedToday)
 
   const handleStartBreak = () => {
-    // Pause any running task before break
     if (runningTask) pauseTask(runningTask.id)
     useApple()
-    setBreakSecsLeft(600)
+    setBreakEndTime(new Date(Date.now() + 600000))
     setBreakActive(true)
   }
 
@@ -212,25 +204,18 @@ export default function Tasks() {
                     <span className="text-[#10b981] font-black text-sm uppercase tracking-widest">Break Time</span>
                   </div>
                   <p className="text-[#555] text-xs font-medium">Tasks locked · step away and recharge</p>
-                  {/* Break progress bar */}
-                  <div className="mt-4 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#10b981] rounded-full transition-all duration-1000 ease-linear shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-                      style={{ width: `${(breakSecsLeft / 600) * 100}%` }}
-                    />
-                  </div>
+                  {breakEndTime && (
+                    <p className="mt-3 text-[#10b981] text-base font-black tracking-wide">
+                      Resume work at {format(breakEndTime, 'h:mm a')}
+                    </p>
+                  )}
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-5xl font-black text-[#10b981] tabular-nums tracking-tight drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-                    {String(Math.floor(breakSecsLeft / 60)).padStart(2, '0')}:{String(breakSecsLeft % 60).padStart(2, '0')}
-                  </div>
-                  <button
-                    onClick={() => setBreakActive(false)}
-                    className="mt-1.5 text-[10px] text-[#444] hover:text-[#888] font-bold uppercase tracking-widest transition-colors"
-                  >
-                    Skip Break
-                  </button>
-                </div>
+                <button
+                  onClick={() => { setBreakActive(false); setBreakEndTime(null) }}
+                  className="text-[10px] text-[#444] hover:text-[#888] font-bold uppercase tracking-widest transition-colors flex-shrink-0"
+                >
+                  Skip Break
+                </button>
               </div>
             </div>
           ) : (
