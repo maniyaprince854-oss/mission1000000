@@ -669,7 +669,7 @@ export default function Tasks() {
                         .sort((a, b) => b[0].localeCompare(a[0]))
                         .map(([date, mins]) => (
                           <div key={date} className="flex justify-between items-center text-[11px]">
-                            <span className="text-[#555] font-bold">{format(new Date(date), 'MMM d, yyyy')}</span>
+                            <span className="text-[#555] font-bold">{format(new Date(date + 'T12:00:00'), 'MMM d, yyyy')}</span>
                             <span className="text-[#888] font-bold">{mins} mins</span>
                           </div>
                         ))}
@@ -682,7 +682,9 @@ export default function Tasks() {
             {/* Modal Footer */}
             <div className="p-6 pt-0 flex justify-between items-center bg-gradient-to-t from-[#000]/20 to-transparent">
               <div className="text-[10px] text-[#333] font-bold uppercase tracking-wider">
-                Created {format(new Date(selectedTask.createdAt), 'MMM d, h:mm a')}
+                {selectedTask.createdAt
+                  ? `Created ${format(new Date(selectedTask.createdAt), 'MMM d, h:mm a')}`
+                  : 'No creation date'}
               </div>
               <button 
                 onClick={() => {
