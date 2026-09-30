@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Pencil, Trash2, X, Calendar as CalIcon, Play, Pause, GripVertical, Check, ChevronDown, ChevronUp, Flag, Clock, Target, TrendingUp, BarChart3, Zap, ArrowRightLeft } from 'lucide-react'
+import { Pencil, Trash2, X, Calendar as CalIcon, Play, Pause, GripVertical, Check, ChevronDown, ChevronUp, Flag, Clock, Target, TrendingUp, BarChart3, Zap, ArrowRightLeft, ListChecks } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { format } from 'date-fns'
 import useStore from '../store'
 import { getGoalProgress, getDaysUntil, getTaskTotalTime } from '../utils/calculations'
+import Checklist from '../components/Checklist'
 
 const COLORS = ['#6366f1','#F0C040','#10b981','#ef4444','#06b6d4','#8b5cf6','#f97316','#ec4899','#84cc16']
 
@@ -46,6 +47,7 @@ function GoalCard({ goal, tasks, allGoals, onEdit, onDelete, onStartTask, onPaus
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newMilestone, setNewMilestone] = useState('')
   const [transferTaskId, setTransferTaskId] = useState(null)
+  const [checklistTaskId, setChecklistTaskId] = useState(null)
 
   const { total, completed, percentage, totalTimeSpent } = getGoalProgress(goal.id, tasks)
   const goalTasks = tasks.filter(t => t.goalId === goal.id)
@@ -258,6 +260,26 @@ function GoalCard({ goal, tasks, allGoals, onEdit, onDelete, onStartTask, onPaus
                                         {liveTime}m
                                       </span>
                                     )}
+                                    {(() => {
+                                      const list = t.checklist || []
+                                      const doneCount = list.filter(i => i.done).length
+                                      const isOpen = checklistTaskId === t.id
+                                      const allDone = list.length > 0 && doneCount === list.length
+                                      return (
+                                        <button
+                                          onClick={() => setChecklistTaskId(isOpen ? null : t.id)}
+                                          title={list.length ? `${doneCount}/${list.length} to-dos done` : 'Add to-dos'}
+                                          className={`flex items-center gap-1 px-1.5 py-1 rounded-lg text-[9px] font-bold transition-colors ${
+                                            isOpen ? 'text-[#F0C040] bg-[#F0C040]/10'
+                                            : allDone ? 'text-[#10b981] bg-[#10b981]/10'
+                                            : list.length ? 'text-[#888] bg-[#1C1C1C] hover:text-white'
+                                            : 'text-[#333] hover:text-[#F0C040] hover:bg-[#1C1C1C]'}`}
+                                        >
+                                          <ListChecks size={10} />
+                                          {list.length > 0 && <span className="tabular-nums">{doneCount}/{list.length}</span>}
+                                        </button>
+                                      )
+                                    })()}
                                     <span className={`text-[9px] font-bold w-4 text-center ${t.status === 'completed' ? 'text-[#10b981]' : 'text-[#444]'}`}>
                                       {t.status === 'completed' ? '✓' : '○'}
                                     </span>
@@ -270,6 +292,15 @@ function GoalCard({ goal, tasks, allGoals, onEdit, onDelete, onStartTask, onPaus
                                     </button>
                                   </div>
                                 </div>
+
+                                {/* Checklist panel */}
+                                {checklistTaskId === t.id && (
+                                  <div className="px-2.5 pb-2.5 pt-0">
+                                    <div className="bg-[#0a0a0a] border border-[#252525] rounded-xl p-3">
+                                      <Checklist taskId={t.id} accent={goal.color} compact />
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* Transfer panel */}
                                 {transferTaskId === t.id && (
@@ -413,7 +444,7 @@ function TaskHistoryModal({ task, onClose, onTaskUpdate }) {
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-[#141414] border border-[#252525] rounded-2xl p-6 w-full max-w-md" style={{ borderTop: '2px solid #F0C040' }} onClick={e => e.stopPropagation()}>
+      <div className="bg-[#141414] border border-[#252525] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" style={{ borderTop: '2px solid #F0C040' }} onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1 min-w-0 pr-4">
             {isEditing ? (
@@ -437,7 +468,11 @@ function TaskHistoryModal({ task, onClose, onTaskUpdate }) {
           <span className="text-2xl font-black tabular-nums text-[#F0C040]">{fmtTime(totalTime)}</span>
         </div>
 
-        <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+        <div className="mb-6 bg-[#0e0e0e] border border-[#1E1E1E] rounded-xl p-4">
+          <Checklist taskId={task.id} accent="#F0C040" />
+        </div>
+
+        <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
           {timeLogList.length === 0 ? (
             <div className="text-center bg-[#0e0e0e] border border-dashed border-[#252525] rounded-xl text-[#555] text-xs py-8">No time logged yet.</div>
           ) : timeLogList.map(([date, mins]) => (

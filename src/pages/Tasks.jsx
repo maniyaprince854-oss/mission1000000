@@ -5,6 +5,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import useStore from '../store'
 import { getTasksByDate, getTaskTotalTime } from '../utils/calculations'
 import { generateDailyReport } from '../utils/generateReport'
+import Checklist, { ChecklistBadge } from '../components/Checklist'
 
 export default function Tasks() {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -408,6 +409,8 @@ export default function Tasks() {
                                 </span>
                               )}
 
+                              <ChecklistBadge task={task} />
+
                               {/* Time Tracking Indicator */}
                               {(displayMins > 0 || isRunning || task.timeSpent > 0) && (
                                 <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md 
@@ -522,7 +525,7 @@ export default function Tasks() {
             className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-500"
             onClick={() => setSelectedTask(null)}
           />
-          <div className="relative w-full max-w-lg bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-3xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 fill-mode-both duration-300">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-3xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 fill-mode-both duration-300">
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
             <div className="absolute top-0 right-0 p-40 bg-[#F0C040]/10 blur-[120px] rounded-full pointer-events-none" />
             {/* Modal Header */}
@@ -600,6 +603,11 @@ export default function Tasks() {
 
             {/* Modal Content */}
             <div className="p-6 space-y-6">
+              {/* Checklist Section */}
+              <div className="bg-[#141414] border border-[#1E1E1E] rounded-2xl p-4">
+                <Checklist taskId={selectedTask.id} accent={goals.find(g => g.id === selectedTask.goalId)?.color || '#F0C040'} />
+              </div>
+
               {/* Description Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">

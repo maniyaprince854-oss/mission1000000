@@ -227,6 +227,51 @@ const useStore = create(
             state.tasks.splice(overIndex, 0, removed)
           }
         }),
+      // Task checklist (to-dos inside a task)
+      addChecklistItem: (taskId, text) =>
+        set((state) => {
+          const task = state.tasks.find((t) => t.id === taskId)
+          if (task) {
+            if (!task.checklist) task.checklist = []
+            task.checklist.push({ id: crypto.randomUUID(), text, done: false, createdAt: new Date().toISOString() })
+          }
+        }),
+      toggleChecklistItem: (taskId, itemId) =>
+        set((state) => {
+          const item = state.tasks.find((t) => t.id === taskId)?.checklist?.find((i) => i.id === itemId)
+          if (item) {
+            item.done = !item.done
+            item.doneAt = item.done ? new Date().toISOString() : null
+          }
+        }),
+      updateChecklistItem: (taskId, itemId, text) =>
+        set((state) => {
+          const item = state.tasks.find((t) => t.id === taskId)?.checklist?.find((i) => i.id === itemId)
+          if (item) item.text = text
+        }),
+      deleteChecklistItem: (taskId, itemId) =>
+        set((state) => {
+          const task = state.tasks.find((t) => t.id === taskId)
+          if (task?.checklist) task.checklist = task.checklist.filter((i) => i.id !== itemId)
+        }),
+      moveChecklistItem: (taskId, itemId, direction) =>
+        set((state) => {
+          const list = state.tasks.find((t) => t.id === taskId)?.checklist
+          if (!list) return
+          const from = list.findIndex((i) => i.id === itemId)
+          if (from === -1) return
+          // Swap with the nearest neighbour in the same group (pending/done), since the UI shows them separately
+          let to = from + direction
+          while (to >= 0 && to < list.length && list[to].done !== list[from].done) to += direction
+          if (to < 0 || to >= list.length) return
+          ;[list[from], list[to]] = [list[to], list[from]]
+        }),
+      clearCompletedChecklist: (taskId) =>
+        set((state) => {
+          const task = state.tasks.find((t) => t.id === taskId)
+          if (task?.checklist) task.checklist = task.checklist.filter((i) => !i.done)
+        }),
+
       addManualTime: (id, mins, dateStr) =>
         set((state) => {
           const task = state.tasks.find((t) => t.id === id)
