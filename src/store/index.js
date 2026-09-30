@@ -243,6 +243,15 @@ const useStore = create(
           Object.assign(state.settings, updates)
         }),
 
+      // Wipe all tasks, goals and board state (settings are kept)
+      clearAllData: () =>
+        set((state) => {
+          state.tasks = []
+          state.goals = []
+          state.goalOrder = { ideas: [], planned: [], in_progress: [], completed: [] }
+          state.pomodoro = { date: '', applesUsed: 0 }
+        }),
+
       // Pomodoro
       useApple: () =>
         set((state) => {

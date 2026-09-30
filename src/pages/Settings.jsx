@@ -32,6 +32,7 @@ export default function Settings() {
   const updateSettings = useStore((s) => s.updateSettings)
   const deleteTask = useStore((s) => s.deleteTask)
   const toggleTask = useStore((s) => s.toggleTask)
+  const clearAllData = useStore((s) => s.clearAllData)
 
   const [form, setForm] = useState({ ...settings })
   const [saved, setSaved] = useState(false)
@@ -49,6 +50,13 @@ export default function Settings() {
       const ids = tasks.map((t) => t.id)
       ids.forEach((id) => deleteTask(id))
     }
+  }
+
+  const handleClearAll = () => {
+    const input = window.prompt(
+      `This permanently deletes ALL ${tasks.length} tasks and ${goals.length} goals. Export a backup first if you might need it.\n\nType DELETE to confirm.`
+    )
+    if (input === 'DELETE') clearAllData()
   }
 
   const exportData = () => {
@@ -229,6 +237,17 @@ export default function Settings() {
                   Delete All Tasks ({tasks.length})
                 </button>
                 <p className="text-[10px] text-[#444] font-medium">This permanently deletes all task history. Goals and settings are not affected.</p>
+
+                <div className="pt-3 border-t border-[#2a1010]">
+                  <button
+                    onClick={handleClearAll}
+                    className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold hover:bg-red-600 transition-colors w-full sm:w-auto"
+                  >
+                    <Trash2 size={12} />
+                    Clear All Data
+                  </button>
+                  <p className="text-[10px] text-[#444] font-medium mt-3">Permanently deletes all tasks, goals and board layout. Your name and settings are kept.</p>
+                </div>
               </div>
             )}
           </div>
