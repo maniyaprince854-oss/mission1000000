@@ -31,6 +31,23 @@ export function getTaskTotalTime(t) {
   return (t.timeSpent || 0) + logMins
 }
 
+// Minutes worked on a given day (yyyy-MM-dd), based on each task's timeLog
+export function getMinutesOnDate(tasks, dateKey) {
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  return tasks.reduce((sum, t) => {
+    const logMins = (t.timeLog && t.timeLog[dateKey]) || 0
+    // Legacy fallback: if old task without timeLog sits on this date, count its timeSpent
+    const legacyMins = (t.date === dateKey && !t.timeLog && t.timeSpent) ? t.timeSpent : 0
+
+    let extra = 0
+    // Add live running time for today
+    if (t.isRunning && t.startTime && dateKey === todayStr) {
+      extra = Math.floor((Date.now() - t.startTime) / 60000)
+    }
+    return sum + logMins + legacyMins + extra
+  }, 0)
+}
+
 export function getGoalProgress(goalId, tasks) {
   const goalTasks = tasks.filter((t) => t.goalId === goalId)
   const total = goalTasks.length
@@ -78,20 +95,8 @@ export function getDashboardStats(goals, tasks) {
     d.setDate(d.getDate() - i)
     const dateKey = format(d, 'yyyy-MM-dd')
     
-    // Instead of looking at t.date, look at the timeLog for dateKey to find how much time was logged specifically on that day
-    const dayTimeSpent = tasks.reduce((sum, t) => {
-      let logMins = (t.timeLog && t.timeLog[dateKey]) || 0
-      // Legacy fallback: if old task without timeLog sits on this date, count its timeSpent
-      let legacyMins = (t.date === dateKey && !t.timeLog && t.timeSpent) ? t.timeSpent : 0
-      
-      let extra = 0
-      // Add live running time if we're generating today's stat
-      if (t.isRunning && t.startTime && dateKey === todayStr) {
-        extra = Math.floor((Date.now() - t.startTime) / 60000)
-      }
-      return sum + logMins + legacyMins + extra
-    }, 0)
-    
+    const dayTimeSpent = getMinutesOnDate(tasks, dateKey)
+
     const label = i === 0 ? 'Today' : format(d, 'eee')
     dailyUnits.push({ date: dateKey, label, units: Math.round(dayTimeSpent / 50 * 10) / 10 })
   }

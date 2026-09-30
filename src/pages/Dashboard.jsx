@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { Target, CheckSquare, ListTodo, TrendingUp, Clock } from 'lucide-react'
 import useStore from '../store'
 import { getDashboardStats } from '../utils/calculations'
+import TimeBudget from '../components/TimeBudget'
 
 function ProgressRing({ percentage, size = 220, stroke = 16 }) {
   const r = (size - stroke * 2) / 2
@@ -126,6 +127,8 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      <TimeBudget tasks={tasks} />
 
       {/* Goal Ticker */}
       <div className="bg-[#141414] border border-[#1E1E1E] rounded-2xl mb-8 overflow-hidden">
